@@ -3,14 +3,17 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>短信分类系统</title>
+  <title>Cube Class</title>
   <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
   <header class="topbar">
     <div>
       <p class="eyebrow">KAIQIAOKEJI</p>
-      <h1>短信分类系统</h1>
+      <h1>Cube Class</h1>
+    </div>
+    <div style="margin-right: 100px;margin-left: 300px;">
+      <span>**   欢迎cdl登录系统    **</span>
     </div>
     <div class="status-strip" aria-label="系统运行状态">
       <span><b id="modelState">在线</b>模型状态</span>
@@ -18,33 +21,29 @@
       <span><b id="observeSize">4</b>观察区</span>
       <span><b id="todayCount">0</b>今日分析</span>
     </div>
+    <div>
+      <button>登录</button>
+    </div>
   </header>
 
   <main class="workspace">
     <aside class="side-panel">
       <section class="panel">
         <div class="panel-title">
-          <span class="title-icon">01</span>
           <div>
             <h2>待分类短信</h2>
-            <p>支持单条推理与样例快速切换</p>
+            <p>支持单条及批量上传</p>
           </div>
         </div>
         <textarea id="smsInput" spellcheck="false">【额度通知】您的授信已获批，最高额度50000元，点击 https://q9x.cn/a 领取，逾qi将影响征信。</textarea>
         <div class="toolbar">
           <button id="analyzeBtn" class="primary">运行分类</button>
+          <button>批量上传</button>
           <button id="clearBtn" class="secondary">清空</button>
         </div>
       </section>
 
       <section class="panel compact">
-        <div class="panel-title">
-          <span class="title-icon">02</span>
-          <div>
-            <h2>样例短信</h2>
-            <p>覆盖授信、放款、还款、逾期、催收、营销</p>
-          </div>
-        </div>
         <div id="sampleList" class="sample-list"></div>
       </section>
     </aside>
@@ -59,50 +58,72 @@
       </nav>
 
       <section id="overview" class="tab-view active">
-        <div class="result-grid">
-          <article class="result-card emphasis">
-            <p class="metric-label">短信类别</p>
-            <h2 id="labelResult">-</h2>
-            <div class="confidence">
-              <span>置信度</span>
-              <strong id="confidenceText">0%</strong>
+        <div class="wide-band category-overview">
+          <div class="section-head">
+            <div>
+              <h2>分类总览</h2>
+              <p>样本总量与各短信类别分布</p>
             </div>
-            <div class="bar-track"><div id="confidenceBar" class="bar-fill"></div></div>
-          </article>
-          <article class="result-card">
-            <p class="metric-label">新词检测</p>
-            <h2 id="newWordFlag">-</h2>
-            <p id="newWordSummary" class="muted">等待分析</p>
-          </article>
-          <article class="result-card">
-            <p class="metric-label">变异检测</p>
-            <h2 id="variantFlag">-</h2>
-            <p id="variantSummary" class="muted">等待分析</p>
-          </article>
-          <article class="result-card">
-            <p class="metric-label">风险提示</p>
-            <h2 id="riskLevel">-</h2>
-            <p id="riskSummary" class="muted">等待分析</p>
-          </article>
+            <div class="total-samples">
+              <span>总样本量</span>
+              <strong>826 条</strong>
+            </div>
+          </div>
+          <div class="category-pie-layout" aria-label="短信分类样本饼图">
+            <div class="category-pie" role="img" aria-label="短信分类占比饼图">
+              <div class="pie-center">
+                <span>总样本量</span>
+                <strong>826</strong>
+                <small>条</small>
+              </div>
+            </div>
+            <div id="categoryLegend" class="category-legend"></div>
+          </div>
         </div>
 
-        <div class="wide-band">
+        <div class="wide-band overview-samples">
           <div class="section-head">
-            <h2>多任务联合输出</h2>
-            <p>分类任务、新词检测任务、变异词检测任务共享融合特征</p>
+            <div>
+              <h2>样本列表</h2>
+              <p>点击任意样本查看该短信的分类、新词检测与风险结果</p>
+            </div>
           </div>
-          <div id="taskScores" class="task-scores"></div>
+          <div id="overviewSampleList" class="overview-sample-list"></div>
         </div>
 
-        <div class="wide-band">
-          <div class="section-head">
-            <h2>多模态特征权重</h2>
-            <p>文本、数值、符号、链接四模态经跨模态注意力融合</p>
+        <div id="singleSampleDetails" class="single-sample-details" hidden>
+          <div class="selected-sample">
+            <span>当前样本</span>
+            <strong id="singleSamplePreview">请选择样本</strong>
           </div>
-          <div class="modal-viz">
-            <canvas id="modalCanvas" width="700" height="220" aria-label="多模态融合图"></canvas>
-            <div id="modalLegend" class="modal-legend"></div>
+
+          <div class="result-grid">
+            <article class="result-card emphasis">
+              <p class="metric-label">短信类别</p>
+              <h2 id="labelResult">-</h2>
+              <div class="confidence">
+                <span>置信度</span>
+                <strong id="confidenceText">0%</strong>
+              </div>
+              <div class="bar-track"><div id="confidenceBar" class="bar-fill"></div></div>
+            </article>
+            <article class="result-card">
+              <p class="metric-label">新词检测</p>
+              <h2 id="newWordFlag">-</h2>
+              <p id="newWordSummary" class="muted">等待分析</p>
+            </article>
+            <article class="result-card">
+              <p class="metric-label">变异检测</p>
+              <h2 id="variantFlag">-</h2>
+              <p id="variantSummary" class="muted">等待分析</p>
+            </article>
+            <article class="result-card">
+              <p class="metric-label">风险提示</p>
+              <h2 id="riskLevel">-</h2>
+              <p id="riskSummary" class="muted">等待分析</p>
+            </article>
           </div>
+
         </div>
       </section>
 

@@ -2,9 +2,24 @@ const labels = [
   "授信成功", "授信失败", "放款成功", "放款失败", "逾期未还", "还款成功", "催收", "营销", "其他"
 ];
 
+const categoryStats = [
+  { label: "授信成功", count: 100, color: "#22c55e" },
+  { label: "逾期未还", displayLabel: "逾期", count: 30, color: "#fb7185" },
+  { label: "放款成功", count: 150, color: "#38bdf8" },
+  { label: "催收", count: 10, color: "#f59e0b" },
+  { label: "营销", count: 299, color: "#a78bfa" },
+  { label: "授信失败", count: 50, color: "#f97316" },
+  { label: "还款成功", count: 120, color: "#14b8a6" },
+  { label: "放款失败", count: 67, color: "#ef4444" }
+];
+
+const categoryTotal = categoryStats.reduce((sum, item) => sum + item.count, 0);
+
 const samples = [
   { label: "授信成功", text: "【额度通知】您的授信已获批，最高额度50000元，点击 https://q9x.cn/a 领取，逾qi将影响征信。" },
+  { label: "授信失败", text: "很抱歉，您的授信申请未通过，本次授信失败，原因是综合评分暂不符合要求。" },
   { label: "放款成功", text: "您申请的借款已放款成功，到账金额12000元，请注意查收并按期还款。" },
+  { label: "放款失败", text: "您的借款放款失败，银行卡异常导致款项未到账，请核对信息后重新提交。" },
   { label: "还款成功", text: "本期账单已扣款成功，还款金额3260元，账户状态正常。" },
   { label: "逾期未还", text: "您的账单已逾期3天，逾期金额980元，请今日24点前处理，避免影响征信。" },
   { label: "催收", text: "多次提醒仍未还款，请立即联系催sh专员处理欠款，否则将启动后续流程。" },
@@ -281,6 +296,7 @@ function renderAll(result) {
 
 function renderOverview(result) {
   const pct = Math.round(result.classification.confidence * 100);
+  document.querySelector("#singleSamplePreview").textContent = result.text;
   document.querySelector("#labelResult").textContent = result.classification.label;
   document.querySelector("#confidenceText").textContent = `${pct}%`;
   document.querySelector("#confidenceBar").style.width = `${pct}%`;
@@ -295,83 +311,30 @@ function renderOverview(result) {
   document.querySelector("#riskLevel").textContent = `${result.risk.level}风险`;
   document.querySelector("#riskSummary").textContent = `综合风险分 ${Math.round(result.risk.score * 100)}，由链接、变异、紧急符号和业务类型共同决定`;
 
-  renderTaskScores(result);
-  renderModalLegend(result.modalWeights);
-  drawModalCanvas(result.modalWeights);
 }
 
-function renderTaskScores(result) {
-  const tasks = [
-    { name: "短信分类", value: result.classification.confidence, desc: `输出类别：${result.classification.label}` },
-    { name: "新词检测", value: result.candidates.some(item => item.trusted) ? 0.86 : 0.42, desc: `${result.candidates.filter(item => item.trusted).length} 个可信新词` },
-    { name: "变异检测", value: result.variants.length ? 0.88 : 0.31, desc: result.variants.length ? "命中变异映射规则" : "未命中变异映射规则" }
-  ];
-  document.querySelector("#taskScores").innerHTML = tasks.map(task => `
-    <div class="task-card">
-      <h3>${task.name}</h3>
-      <div class="confidence"><span>${task.desc}</span><strong>${Math.round(task.value * 100)}%</strong></div>
-      <div class="bar-track"><div class="bar-fill" style="width:${Math.round(task.value * 100)}%"></div></div>
-    </div>
-  `).join("");
-}
+function renderCategoryOverview() {
+  let current = 0;
+  const stops = categoryStats.map(item => {
+    const start = current;
+    current += item.count / categoryTotal * 100;
+    return `${item.color} ${start.toFixed(2)}% ${current.toFixed(2)}%`;
+  }).join(", ");
 
-function renderModalLegend(weights) {
-  const names = { text: "文本语义", numeric: "数值模态", symbol: "符号模态", link: "链接模态" };
-  document.querySelector("#modalLegend").innerHTML = Object.entries(weights).map(([key, value]) => `
-    <div class="legend-row">
-      <span class="legend-swatch" style="background:${colors[key]}"></span>
-      <span>${names[key]}</span>
-      <strong>${Math.round(value * 100)}%</strong>
-    </div>
-  `).join("");
-}
-
-function drawModalCanvas(weights) {
-  const canvas = document.querySelector("#modalCanvas");
-  const ctx = canvas.getContext("2d");
-  const width = canvas.width;
-  const height = canvas.height;
-  ctx.clearRect(0, 0, width, height);
-  ctx.fillStyle = "#fbfcfd";
-  ctx.fillRect(0, 0, width, height);
-
-  const center = { x: width - 150, y: height / 2 };
-  const nodes = [
-    { key: "text", label: "文本", x: 120, y: 48 },
-    { key: "numeric", label: "数值", x: 120, y: 95 },
-    { key: "symbol", label: "符号", x: 120, y: 142 },
-    { key: "link", label: "链接", x: 120, y: 189 }
-  ];
-
-  nodes.forEach(node => {
-    ctx.beginPath();
-    ctx.moveTo(node.x + 62, node.y);
-    ctx.lineTo(center.x - 70, center.y);
-    ctx.strokeStyle = colors[node.key];
-    ctx.lineWidth = 2 + weights[node.key] * 8;
-    ctx.globalAlpha = 0.75;
-    ctx.stroke();
-    ctx.globalAlpha = 1;
-  });
-
-  nodes.forEach(node => {
-    ctx.fillStyle = colors[node.key];
-    roundRect(ctx, node.x - 58, node.y - 17, 116, 34, 7);
-    ctx.fill();
-    ctx.fillStyle = "#fff";
-    ctx.font = "700 15px sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText(`${node.label} ${Math.round(weights[node.key] * 100)}%`, node.x, node.y + 5);
-  });
-
-  ctx.fillStyle = "#244653";
-  roundRect(ctx, center.x - 74, center.y - 38, 148, 76, 8);
-  ctx.fill();
-  ctx.fillStyle = "#fff";
-  ctx.font = "700 16px sans-serif";
-  ctx.fillText("跨模态注意力", center.x, center.y - 5);
-  ctx.font = "12px sans-serif";
-  ctx.fillText("融合特征 512D", center.x, center.y + 18);
+  document.querySelector(".total-samples strong").textContent = `${categoryTotal} 条`;
+  document.querySelector(".pie-center strong").textContent = categoryTotal;
+  document.querySelector(".category-pie").style.setProperty("--pie-data", `conic-gradient(${stops})`);
+  document.querySelector("#categoryLegend").innerHTML = categoryStats.map(item => {
+    const percentText = formatPercent(item.count / categoryTotal);
+    return `
+      <div class="legend-item">
+        <span class="legend-swatch" style="background:${item.color}"></span>
+        <span class="legend-name">${item.displayLabel || item.label}</span>
+        <strong class="legend-count">${item.count} 条</strong>
+        <strong class="legend-percent">${percentText}</strong>
+      </div>
+    `;
+  }).join("");
 }
 
 function renderPipeline(result) {
@@ -460,6 +423,35 @@ function initSamples() {
   });
 }
 
+function initOverviewSamples() {
+  const list = document.querySelector("#overviewSampleList");
+  const details = document.querySelector("#singleSampleDetails");
+
+  list.innerHTML = samples.map((sample, index) => `
+    <button class="overview-sample-item" data-index="${index}" type="button">
+      <strong>${sample.label}</strong>
+      <span>${sample.text}</span>
+      <b>查看</b>
+    </button>
+  `).join("");
+
+  list.querySelectorAll(".overview-sample-item").forEach(button => {
+    button.addEventListener("click", () => {
+      list.querySelectorAll(".overview-sample-item").forEach(item => {
+        item.classList.remove("active");
+        item.querySelector("b").textContent = "查看";
+      });
+      button.classList.add("active");
+      button.querySelector("b").textContent = "已选中";
+      const sample = samples[Number(button.dataset.index)];
+      document.querySelector("#smsInput").value = sample.text;
+      button.insertAdjacentElement("afterend", details);
+      analyze();
+      details.hidden = false;
+    });
+  });
+}
+
 function initTabs() {
   document.querySelectorAll(".tab").forEach(tab => {
     tab.addEventListener("click", () => {
@@ -467,7 +459,6 @@ function initTabs() {
       document.querySelectorAll(".tab-view").forEach(view => view.classList.remove("active"));
       tab.classList.add("active");
       document.querySelector(`#${tab.dataset.tab}`).classList.add("active");
-      if (lastResult) drawModalCanvas(lastResult.modalWeights);
     });
   });
 }
@@ -494,6 +485,10 @@ function percent(value) {
   return `${Math.round(value * 100)}%`;
 }
 
+function formatPercent(value) {
+  return `${(value * 100).toFixed(1)}%`;
+}
+
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
@@ -504,6 +499,8 @@ document.querySelector("#clearBtn").addEventListener("click", () => {
 });
 
 initSamples();
+renderCategoryOverview();
+initOverviewSamples();
 initTabs();
 renderDictionary();
 analyze();
