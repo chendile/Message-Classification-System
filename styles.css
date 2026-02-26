@@ -558,67 +558,63 @@ canvas {
   border-radius: 3px;
 }
 
-.pipeline {
-  display: grid;
-  gap: 12px;
-}
-
-.step {
-  display: grid;
-  grid-template-columns: 42px 1fr auto;
-  gap: 12px;
-  padding: 15px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #fbfcfd;
-}
-
-.step-index {
-  width: 34px;
-  height: 34px;
-  display: grid;
-  place-items: center;
-  border-radius: 7px;
-  background: #e5eef5;
-  color: var(--blue);
-  font-weight: 800;
-}
-
-.step h3 {
-  margin: 0 0 5px;
-  font-size: 16px;
-}
-
-.step p {
-  margin: 0;
-  color: var(--muted);
-  line-height: 1.6;
-  font-size: 13px;
-}
-
-.tag {
-  display: inline-flex;
-  align-items: center;
-  height: 26px;
-  padding: 0 9px;
-  border-radius: 999px;
-  background: #e8edf1;
-  color: #38515c;
-  font-size: 12px;
-  font-weight: 700;
-}
-
 .table-wrap {
   overflow-x: auto;
   border: 1px solid var(--line);
   border-radius: 8px;
 }
 
+.candidate-tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.candidate-tools input[type="search"] {
+  width: 220px;
+  height: 38px;
+  padding: 0 12px;
+  border: 1px solid #c9d4da;
+  border-radius: 7px;
+  outline: none;
+  background: #fbfcfd;
+  color: var(--ink);
+  font: 13px/1.4 inherit;
+}
+
+.candidate-tools input[type="search"]:focus {
+  border-color: var(--teal);
+  box-shadow: 0 0 0 3px rgba(15, 124, 139, 0.14);
+}
+
+.filter-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 11px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fbfcfd;
+  color: #38515c;
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.filter-toggle input {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--green);
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
   background: #fff;
-  min-width: 780px;
+  min-width: 920px;
 }
 
 th,
@@ -649,6 +645,22 @@ tr:last-child td {
   text-align: center;
 }
 
+.dict-pill {
+  display: inline-block;
+  min-width: 58px;
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: #edf1f4;
+  color: #40545e;
+  font-weight: 800;
+  text-align: center;
+}
+
+.dict-pill.exists {
+  background: #e8f3ef;
+  color: var(--green);
+}
+
 .dict-layout {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -660,7 +672,9 @@ tr:last-child td {
   font-size: 16px;
 }
 
-.word-cloud {
+.dict-bars {
+  display: grid;
+  gap: 10px;
   min-height: 180px;
   padding: 14px;
   border: 1px solid var(--line);
@@ -668,22 +682,47 @@ tr:last-child td {
   background: #fbfcfd;
 }
 
-.word-chip {
-  display: inline-flex;
+.dict-bar-row {
+  display: grid;
+  grid-template-columns: 94px minmax(120px, 1fr) 48px;
   align-items: center;
-  gap: 8px;
-  margin: 4px;
-  padding: 8px 10px;
-  border-radius: 999px;
-  background: #e8f3ef;
-  color: #175d4c;
-  font-weight: 700;
-  font-size: 13px;
+  gap: 10px;
+  min-height: 28px;
 }
 
-.observe .word-chip {
-  background: #fff4df;
-  color: #8a5717;
+.dict-word {
+  overflow: hidden;
+  color: #40545e;
+  font-size: 13px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dict-track {
+  height: 18px;
+  overflow: hidden;
+  border-radius: 6px;
+  background: #e7edf1;
+}
+
+.dict-fill {
+  display: block;
+  height: 100%;
+  min-width: 4px;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #22c55e, #14b8a6);
+}
+
+.observe .dict-fill {
+  background: linear-gradient(90deg, #f59e0b, #f97316);
+}
+
+.dict-score {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 800;
+  text-align: right;
 }
 
 .lifecycle {
@@ -791,6 +830,14 @@ tr:last-child td {
     gap: 8px;
   }
 
+  .candidate-tools {
+    justify-content: flex-start;
+  }
+
+  .candidate-tools input[type="search"] {
+    width: 100%;
+  }
+
   .overview-sample-item {
     grid-template-columns: 1fr auto;
   }
@@ -808,12 +855,4 @@ tr:last-child td {
     grid-template-columns: 1fr;
   }
 
-  .step {
-    grid-template-columns: 34px 1fr;
-  }
-
-  .step .tag {
-    grid-column: 2;
-    width: fit-content;
-  }
 }
