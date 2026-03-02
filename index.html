@@ -53,7 +53,7 @@
         <button class="tab active" data-tab="overview">分类总览</button>
         <button class="tab" data-tab="newwords">新词发现</button>
         <button class="tab" data-tab="dictionary">动态词典</button>
-        <button class="tab" data-tab="explain">决策解释</button>
+        <button class="tab" data-tab="explain">迭代图谱</button>
       </nav>
 
       <section id="overview" class="tab-view active">
@@ -179,10 +179,10 @@
 
       <section id="explain" class="tab-view">
         <div class="section-head">
-          <h2>可解释性决策路径</h2>
-          <p>记录输入标准化、关键注意力词元、特征命中、新词使用和最终分类</p>
+          <h2>新词词典迭代图谱</h2>
+          <p>展示每轮迭代中新词进入观察区、晋升主词典和词典衰减保留的过程</p>
         </div>
-        <div id="explainBox" class="explain-box"></div>
+        <div id="iterationGraph" class="iteration-graph"></div>
       </section>
     </section>
   </main>
