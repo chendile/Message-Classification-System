@@ -30,6 +30,4 @@ http://localhost:3000
 ## 说明
 
 页面使用前端规则模拟短信分类、新词发现和动态词典闭环。`server.js` 提供无依赖 Node 后端，用于保存人工修正分类，数据写入 `data/corrections.json`。真实模型接入时，可将 `app.js` 中的 `analyze()` 替换为后端接口调用，并保留当前渲染结构。
-# Message-Classification-System
-# Message-Classification-System
-# Message-Classification-System
+
