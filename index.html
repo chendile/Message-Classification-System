@@ -24,7 +24,7 @@
       <section class="panel">
         <div class="panel-title">
           <div>
-            <h2>待分类短信</h2>
+            <h2>短信分类</h2>
             <p>支持单条及批量上传</p>
           </div>
         </div>
@@ -107,11 +107,6 @@
         </div>
 
         <div id="singleSampleDetails" class="single-sample-details" hidden>
-          <div class="selected-sample">
-            <span>当前样本</span>
-            <strong id="singleSamplePreview">请选择样本</strong>
-          </div>
-
           <div class="result-grid">
             <article class="result-card emphasis">
               <p class="metric-label">短信类别</p>
@@ -131,11 +126,6 @@
               <p class="metric-label">变异检测</p>
               <h2 id="variantFlag">-</h2>
               <p id="variantSummary" class="muted">等待分析</p>
-            </article>
-            <article class="result-card">
-              <p class="metric-label">风险提示</p>
-              <h2 id="riskLevel">-</h2>
-              <p id="riskSummary" class="muted">等待分析</p>
             </article>
           </div>
 
@@ -164,8 +154,8 @@
       <section id="newwords" class="tab-view">
         <div class="section-head">
           <div>
-            <h2>候选新词可信度分析</h2>
-            <p>综合模型注意力、PMI、边界熵、标签关联值计算可信关联值</p>
+            <h2>新词分析</h2>
+            <p>识别短信中的候选新词，并给出可信度与词表状态</p>
           </div>
           <div class="candidate-tools">
             <input id="candidateSearch" type="search" placeholder="查询候选词">
@@ -180,10 +170,10 @@
             <thead>
               <tr>
                 <th>候选词</th>
-                <th>注意力</th>
-                <th>PMI</th>
-                <th>边界熵</th>
-                <th>标签关联</th>
+                <th>文本特征</th>
+                <th>共现强度</th>
+                <th>边界稳定</th>
+                <th>分类相关</th>
                 <th>可信关联值</th>
                 <th>现有词表</th>
                 <th>状态</th>

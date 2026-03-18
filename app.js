@@ -388,7 +388,6 @@ function renderOverview(result) {
   const pct = Math.round(result.classification.confidence * 100);
   const correction = selectedSample ? corrections[selectedSample.id] : null;
   const finalLabel = correction?.manualLabel || result.classification.label;
-  document.querySelector("#singleSamplePreview").textContent = result.text;
   document.querySelector("#labelResult").textContent = finalLabel;
   document.querySelector("#confidenceText").textContent = `${pct}%`;
   document.querySelector("#confidenceBar").style.width = `${pct}%`;
@@ -400,10 +399,6 @@ function renderOverview(result) {
   document.querySelector("#variantSummary").textContent = result.variants.length
     ? result.variants.map(item => `${item.variant}->${item.standard}`).join("，")
     : "文本未命中形近字、同音字或拼音混写规则";
-  document.querySelector("#riskLevel").textContent = `${result.risk.level}风险`;
-  document.querySelector("#riskSummary").textContent = result.classification.belowThreshold
-    ? `置信度低于门限 ${formatPercent(result.config.confidenceThreshold)}，自动归为其他并进入人工审核`
-    : `综合风险分 ${Math.round(result.risk.score * 100)}，由链接、变异、紧急符号和业务类型共同决定`;
   renderCorrectionPanel(result);
 
 }
