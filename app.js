@@ -785,7 +785,7 @@ function renderDictionary(lifecycle = { graduated: [], observed: [] }) {
   document.querySelector("#lifecycleLog").innerHTML = `
     本轮晋升：<span class="highlight">${lifecycle.graduated.length ? lifecycle.graduated.join("、") : "无"}</span>；
     本轮观察：${lifecycle.observed.length ? lifecycle.observed.slice(0, 8).join("、") : "无"}。
-    词典策略：观察区累计置信度达到 0.70 后进入主词典，未命中的主词按衰减因子 0.995 轻量衰减。
+    词典策略：观察区累计置信度达到阈值后进入主词典，未进入主词典的词，逐轮衰减，跌破阈值后退出观察区。
   `;
 }
 
