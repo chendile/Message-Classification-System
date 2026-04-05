@@ -262,30 +262,6 @@ button:hover {
   background: #edf1f4;
 }
 
-.sample-list {
-  display: grid;
-  gap: 8px;
-}
-
-.sample-item {
-  width: 100%;
-  text-align: left;
-  padding: 11px;
-  background: #f7fafb;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  font-weight: 600;
-  line-height: 1.45;
-}
-
-.sample-item span {
-  display: block;
-  margin-top: 3px;
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 500;
-}
-
 .main-panel {
   overflow: hidden;
 }
@@ -1192,6 +1168,7 @@ tr:last-child td {
   color: var(--muted);
   font-size: 12px;
   line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 
 .graph-node ul {

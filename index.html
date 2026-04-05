@@ -28,11 +28,11 @@
             <p>支持单条及批量上传</p>
           </div>
         </div>
-        <textarea id="smsInput" spellcheck="false">【额度通知】您的授信已获批，最高额度50000元，点击 https://q9x.cn/a 领取，逾qi将影响征信。</textarea>
+        <textarea id="smsInput" spellcheck="false">【这里可以填入单条短信进行分类】</textarea>
         <div class="parameter-panel">
           <div class="param-field">
             <label for="modelEndpoint">模型地址来源</label>
-            <input id="modelEndpoint" type="text" placeholder="默认：http://127.0.0.1:3000/api/classify">
+            <input id="modelEndpoint" type="text" placeholder="默认：内置模型">
           </div>
           <div class="param-grid">
             <div class="param-field">
@@ -55,10 +55,6 @@
           <button>批量上传</button>
           <button id="clearBtn" class="secondary">清空</button>
         </div>
-      </section>
-
-      <section class="panel compact">
-        <div id="sampleList" class="sample-list"></div>
       </section>
     </aside>
 
@@ -211,7 +207,7 @@
       <section id="explain" class="tab-view">
         <div class="section-head">
           <h2>新词词典迭代图谱</h2>
-          <p>展示每轮迭代中新词进入观察区、晋升主词典和词典衰减保留的过程</p>
+          <p>新词进入观察区、加入主词典、观察区待定的过程</p>
         </div>
         <div id="iterationGraph" class="iteration-graph"></div>
       </section>

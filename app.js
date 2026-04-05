@@ -290,7 +290,7 @@ function discoverCandidates(text, normalized, features, classification, config =
 }
 
 function isInExistingDictionary(word) {
-  return initialDictionaryWords.has(word);
+  return initialDictionaryWords.has(word) || Boolean(dictionary[word]);
 }
 
 function keywordAttention(word, label) {
@@ -379,8 +379,10 @@ function renderAll(result) {
   setText("#observeSize", Object.keys(observation).length);
   renderOverview(result);
   renderCandidates(result.candidates);
-  renderDictionary(result.lifecycle);
+  renderDictionary(result);
   renderIterationGraph(result);
+  renderTrainingTimeline(result);
+  renderTrainingClassificationResults(result);
   renderTaskLogs();
 }
 
@@ -518,10 +520,10 @@ function seedTaskLogs() {
 }
 
 function logDictionaryIteration(result) {
+  const linkedEntries = getLinkedDictionaryEntries(result);
   const changedWords = [
-    ...result.lifecycle.graduated.map(word => `晋升：${word}`),
-    ...result.lifecycle.observed.slice(0, 8).map(word => `观察：${word}`),
-    ...result.lifecycle.decayed.slice(0, 6).map(word => `衰减：${word}`)
+    ...linkedEntries.main.map(([word]) => `主词典：${word}`),
+    ...linkedEntries.observe.map(([word]) => `观察区：${word}`)
   ];
   addTaskLog({
     type: "短信分类",
@@ -541,7 +543,10 @@ function formatConfig(config) {
 function renderTaskLogs() {
   const taskRows = document.querySelector("#taskRows");
   if (!taskRows) return;
-  taskRows.innerHTML = taskLogs.length ? taskLogs.map(log => `
+  const visibleLogs = selectedSample
+    ? taskLogs.filter(log => log.sampleId === selectedSample.id)
+    : taskLogs;
+  taskRows.innerHTML = visibleLogs.length ? visibleLogs.map(log => `
     <tr>
       <td>${log.user}</td>
       <td>${log.time}</td>
@@ -551,7 +556,7 @@ function renderTaskLogs() {
       <td>${log.params}</td>
       <td><button class="task-link" type="button" data-sample-id="${log.sampleId || ""}">查看结果</button></td>
     </tr>
-  `).join("") : `<tr><td colspan="7">暂无任务记录</td></tr>`;
+  `).join("") : `<tr><td colspan="7">当前样本暂无任务记录</td></tr>`;
 }
 
 function renderTaskWords(words) {
@@ -564,13 +569,24 @@ function renderTaskWords(words) {
   `;
 }
 
-function renderTrainingTimeline() {
+function getLinkedWords(result, fallbackWords) {
+  if (!result) return fallbackWords;
+  const words = [
+    ...result.candidates.map(item => item.word),
+    ...result.variants.map(item => item.standard),
+    result.classification.label
+  ];
+  return [...new Set(words)].filter(Boolean).slice(0, 5);
+}
+
+function renderTrainingTimeline(result = lastResult) {
   const container = document.querySelector("#trainingTimeline");
   if (!container) return;
   container.innerHTML = supervisedTrainingRounds.map((round, index) => {
     const previous = supervisedTrainingRounds[index - 1];
     const f1Delta = previous ? round.macroF1 - previous.macroF1 : 0;
     const accDelta = previous ? round.accuracy - previous.accuracy : 0;
+    const linkedWords = getLinkedWords(result, round.words);
     return `
       <article class="training-round">
         <div class="round-marker">
@@ -580,10 +596,10 @@ function renderTrainingTimeline() {
         <div class="round-body">
           <div class="round-head">
             <h3>第 ${round.round} 轮监督训练</h3>
-            <span>更新 ${round.words.length} 个词</span>
+            <span>更新 ${linkedWords.length} 个词</span>
           </div>
           <div class="round-words">
-            ${round.words.map(word => `<span>${word}</span>`).join("")}
+            ${linkedWords.map(word => `<span>${word}</span>`).join("")}
           </div>
           <div class="metric-grid">
             ${renderTrainingMetric("Macro-F1", round.macroF1, f1Delta, true)}
@@ -613,12 +629,19 @@ function startSupervisedTraining() {
   status.textContent = "训练结束，已生成时间轴和分类结果。";
   status.classList.add("done");
   result.hidden = false;
-  renderTrainingTimeline();
-  renderTrainingClassificationResults();
+  renderTrainingTimeline(lastResult);
+  renderTrainingClassificationResults(lastResult);
 }
 
-function renderTrainingClassificationResults() {
-  document.querySelector("#trainingClassRows").innerHTML = supervisedTrainingResults.map(item => `
+function renderTrainingClassificationResults(result = lastResult) {
+  const rows = selectedSample && result ? [{
+    text: selectedSample.text,
+    truth: selectedSample.label,
+    prediction: corrections[selectedSample.id]?.manualLabel || result.classification.label,
+    confidence: result.classification.confidence
+  }] : supervisedTrainingResults;
+
+  document.querySelector("#trainingClassRows").innerHTML = rows.map(item => `
     <tr>
       <td>${item.text}</td>
       <td>${item.truth}</td>
@@ -752,13 +775,27 @@ function renderCandidates(candidates) {
       <td>${percent(item.labelGuidance)}</td>
       <td><span class="score-pill">${percent(item.trust)}</span></td>
       <td><span class="dict-pill ${item.inDictionary ? "exists" : ""}">${item.inDictionary ? "是" : "否"}</span></td>
-      <td>${item.inDictionary ? "<span class='highlight'>现有词</span>" : item.trusted ? "<span class='highlight'>可信新词</span>" : "<span class='warn'>观察中</span>"}</td>
+      <td>${item.inDictionary ? "<span class='highlight'>主词典</span>" : "<span class='warn'>观察区</span>"}</td>
     </tr>
   `).join("") : `<tr><td colspan="8">暂无候选新词</td></tr>`;
   document.querySelector("#candidateRows").innerHTML = rows;
 }
 
-function renderDictionary(lifecycle = { graduated: [], observed: [] }) {
+function getLinkedDictionaryEntries(result = lastResult) {
+  if (!result) return { main: [], observe: [] };
+  const entries = result.candidates.reduce((groups, item) => {
+    const inMain = isInExistingDictionary(item.word);
+    const score = inMain
+      ? dictionary[item.word] || item.trust
+      : observation[item.word] || item.trust;
+    groups[inMain ? "main" : "observe"].push([item.word, score]);
+    return groups;
+  }, { main: [], observe: [] });
+
+  return entries;
+}
+
+function renderDictionary(result = lastResult) {
   const renderWord = (entries, source) => entries
     .sort((a, b) => b[1] - a[1])
     .map(([word, score]) => `
@@ -780,18 +817,23 @@ function renderDictionary(lifecycle = { graduated: [], observed: [] }) {
   observeDict.classList.toggle("editing", dictionaryEditMode);
   document.querySelector("#toggleDictEdit").textContent = dictionaryEditMode ? "退出人工调整" : "人工调整词典";
   document.querySelector("#applyDictEdit").disabled = !dictionaryEditMode;
-  mainDict.innerHTML = renderWord(Object.entries(dictionary), "main");
-  observeDict.innerHTML = renderWord(Object.entries(observation), "observe");
+  const linkedEntries = getLinkedDictionaryEntries(result);
+  mainDict.innerHTML = linkedEntries.main.length
+    ? renderWord(linkedEntries.main, "main")
+    : "<p class='muted'>当前短信暂无候选新词升入主词典</p>";
+  observeDict.innerHTML = linkedEntries.observe.length
+    ? renderWord(linkedEntries.observe, "observe")
+    : "<p class='muted'>当前短信暂无候选新词留在观察区</p>";
   document.querySelector("#lifecycleLog").innerHTML = `
-    本轮晋升：<span class="highlight">${lifecycle.graduated.length ? lifecycle.graduated.join("、") : "无"}</span>；
-    本轮观察：${lifecycle.observed.length ? lifecycle.observed.slice(0, 8).join("、") : "无"}。
-    词典策略：观察区累计置信度达到阈值后进入主词典，未进入主词典的词，逐轮衰减，跌破阈值后退出观察区。
+    当前短信：${selectedSample ? selectedSample.text : result?.text || "未选择短信"}<br>
+    升入主词典：<span class="highlight">${linkedEntries.main.length ? linkedEntries.main.map(([word]) => word).join("、") : "无"}</span>；
+    观察区：${linkedEntries.observe.length ? linkedEntries.observe.map(([word]) => word).join("、") : "无"}。
   `;
 }
 
 function toggleDictionaryEdit() {
   dictionaryEditMode = !dictionaryEditMode;
-  renderDictionary(lastResult?.lifecycle);
+  renderDictionary(lastResult);
 }
 
 function applyDictionaryEdit() {
@@ -816,7 +858,7 @@ function applyDictionaryEdit() {
     });
   }
   dictionaryEditMode = false;
-  renderDictionary(lastResult?.lifecycle);
+  renderDictionary(lastResult);
   renderCandidates(lastResult?.candidates || []);
   if (lastResult) renderIterationGraph(lastResult);
   renderTaskLogs();
@@ -825,12 +867,12 @@ function applyDictionaryEdit() {
 function renderIterationGraph(result) {
   const candidates = [...result.candidates].sort((a, b) => b.trust - a.trust);
   const candidateWords = candidates.slice(0, 8).map(item => `${item.word} ${percent(item.trust)}`);
-  const observedWords = result.lifecycle.observed.slice(0, 8);
-  const graduatedWords = result.lifecycle.graduated.slice(0, 8);
-  const decayedWords = result.lifecycle.decayed.slice(0, 8);
-  const retainedWords = Object.entries(dictionary)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 6)
+  const linkedEntries = getLinkedDictionaryEntries(result);
+  const observedWords = linkedEntries.observe
+    .slice(0, 8)
+    .map(([word, score]) => `${word} ${percent(score)}`);
+  const graduatedWords = linkedEntries.main
+    .slice(0, 8)
     .map(([word, score]) => `${word} ${percent(score)}`);
 
   document.querySelector("#iterationGraph").innerHTML = `
@@ -841,16 +883,14 @@ function renderIterationGraph(result) {
         <path d="M580 210 C700 210 700 105 820 105" />
         <path d="M580 310 C700 310 700 310 820 310" />
       </svg>
-      ${renderGraphNode("候选新词", "从本轮短信中抽取", candidateWords, "source")}
-      ${renderGraphNode("观察区", "可信值累计，等待阈值", observedWords, "observe")}
-      ${renderGraphNode("主词典", "达到阈值后注入词表", graduatedWords.length ? graduatedWords : retainedWords, "main")}
-      ${renderGraphNode("衰减保留", "本轮未命中，置信度轻量衰减", decayedWords, "decay")}
+      ${renderGraphNode("候选新词", "短信抽取", candidateWords, "source")}
+      ${renderGraphNode("观察区", "置信度累计", observedWords, "observe")}
+      ${renderGraphNode("主词典", "达到阈值后加入词典中", graduatedWords, "main")}
     </div>
     <div class="graph-summary">
-      <span>本轮候选 <strong>${candidates.length}</strong></span>
-      <span>进入观察区 <strong>${result.lifecycle.observed.length}</strong></span>
-      <span>晋升主词典 <strong>${result.lifecycle.graduated.length}</strong></span>
-      <span>衰减保留 <strong>${result.lifecycle.decayed.length}</strong></span>
+      <span>候选词 <strong>${candidates.length}</strong></span>
+      <span>进入观察区 <strong>${linkedEntries.observe.length}</strong></span>
+      <span>加入主词典 <strong>${linkedEntries.main.length}</strong></span>
     </div>
   `;
 }
@@ -868,25 +908,8 @@ function renderGraphNode(title, subtitle, words, type) {
   `;
 }
 
-function initSamples() {
-  document.querySelector("#sampleList").innerHTML = samples.map((sample, index) => `
-    <button class="sample-item" data-index="${index}">
-      ${sample.label}
-      <span>${sample.text}</span>
-    </button>
-  `).join("");
-
-  document.querySelectorAll(".sample-item").forEach(button => {
-    button.addEventListener("click", () => {
-      document.querySelector("#smsInput").value = samples[Number(button.dataset.index)].text;
-      analyze();
-    });
-  });
-}
-
 function initOverviewSamples() {
   const list = document.querySelector("#overviewSampleList");
-  const details = document.querySelector("#singleSampleDetails");
 
   list.innerHTML = samples.map((sample, index) => `
     <button class="overview-sample-item" data-index="${index}" data-sample-id="sample-${index}" type="button">
@@ -898,21 +921,29 @@ function initOverviewSamples() {
 
   list.querySelectorAll(".overview-sample-item").forEach(button => {
     button.addEventListener("click", () => {
-      list.querySelectorAll(".overview-sample-item").forEach(item => {
-        item.classList.remove("active");
-        item.querySelector("b").textContent = "查看";
-      });
-      button.classList.add("active");
-      button.querySelector("b").textContent = "已选中";
-      const sampleIndex = Number(button.dataset.index);
-      const sample = samples[sampleIndex];
-      selectedSample = { id: `sample-${sampleIndex}`, ...sample };
-      document.querySelector("#smsInput").value = sample.text;
-      button.insertAdjacentElement("afterend", details);
-      analyze();
-      details.hidden = false;
+      selectOverviewSample(Number(button.dataset.index));
     });
   });
+}
+
+function selectOverviewSample(sampleIndex) {
+  const list = document.querySelector("#overviewSampleList");
+  const details = document.querySelector("#singleSampleDetails");
+  const button = list.querySelector(`.overview-sample-item[data-index="${sampleIndex}"]`);
+  const sample = samples[sampleIndex];
+  if (!button || !sample) return;
+
+  list.querySelectorAll(".overview-sample-item").forEach(item => {
+    item.classList.remove("active");
+    item.querySelector("b").textContent = "查看";
+  });
+  button.classList.add("active");
+  button.querySelector("b").textContent = "已选中";
+  selectedSample = { id: `sample-${sampleIndex}`, ...sample };
+  document.querySelector("#smsInput").value = sample.text;
+  button.insertAdjacentElement("afterend", details);
+  analyze();
+  details.hidden = false;
 }
 
 function initCorrectionControls() {
@@ -1008,7 +1039,6 @@ document.querySelector("#clearBtn").addEventListener("click", () => {
 
 async function initApp() {
   seedTaskLogs();
-  initSamples();
   renderCategoryOverview();
   initOverviewSamples();
   initCorrectionControls();
@@ -1019,9 +1049,8 @@ async function initApp() {
   initTaskLogControls();
   initTrainingControls();
   await loadCorrections();
+  selectOverviewSample(0);
   startSupervisedTraining();
-  renderDictionary();
-  analyze();
 }
 
 initApp();
