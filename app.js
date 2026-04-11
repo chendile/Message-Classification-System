@@ -348,16 +348,32 @@ function renderAll(result) {
   renderTaskLogs();
 }
 
+function getSingleSampleCandidates(result) {
+  const text = `${result.text}${result.normalized || ""}`;
+  const semanticMatches = {
+    "授信获批": ["授信", "获批"],
+    "提额包": ["提额"],
+    "授信申请": ["授信", "申请"]
+  };
+
+  return result.candidates.filter(item => {
+    if (text.includes(item.word)) return true;
+    const parts = semanticMatches[item.word];
+    return parts ? parts.every(part => text.includes(part)) : false;
+  });
+}
+
 function renderOverview(result) {
   const pct = Math.round(result.classification.confidence * 100);
   const correction = selectedSample ? corrections[selectedSample.id] : null;
   const finalLabel = correction?.manualLabel || result.classification.label;
+  const sampleCandidates = getSingleSampleCandidates(result);
   document.querySelector("#labelResult").textContent = finalLabel;
   document.querySelector("#confidenceText").textContent = `${pct}%`;
   document.querySelector("#confidenceBar").style.width = `${pct}%`;
-  document.querySelector("#newWordFlag").textContent = result.candidates.some(item => item.trusted) ? "含可信新词" : "未确认";
-  document.querySelector("#newWordSummary").textContent = result.candidates.length
-    ? `发现 ${result.candidates.length} 个候选词，${result.candidates.filter(item => item.trusted).length} 个超过阈值`
+  document.querySelector("#newWordFlag").textContent = sampleCandidates.some(item => item.trusted) ? "含可信新词" : "未确认";
+  document.querySelector("#newWordSummary").textContent = sampleCandidates.length
+    ? `发现 ${sampleCandidates.length} 个候选词`
     : "未发现候选新词";
   document.querySelector("#variantFlag").textContent = result.variants.length ? "含变异词" : "未检出";
   document.querySelector("#variantSummary").textContent = result.variants.length
