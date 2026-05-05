@@ -450,6 +450,15 @@ button:hover {
   font-size: 16px;
 }
 
+.variant-table .dict-remove {
+  display: none;
+  justify-content: flex-start;
+}
+
+.variant-table.editing .dict-remove {
+  display: inline-flex;
+}
+
 .legend-item {
   display: grid;
   grid-template-columns: 14px minmax(74px, 1fr) 72px 64px;
