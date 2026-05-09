@@ -110,6 +110,14 @@ h1, h2, h3, p {
   min-width: 0;
 }
 
+.side-panel {
+  position: sticky;
+  top: 18px;
+  align-self: start;
+  max-height: calc(100vh - 36px);
+  overflow-y: auto;
+}
+
 .panel,
 .main-panel,
 .wide-band {
@@ -1280,6 +1288,12 @@ tr:last-child td {
 
   .workspace {
     display: grid;
+  }
+
+  .side-panel {
+    position: static;
+    max-height: none;
+    overflow: visible;
   }
 }
 
