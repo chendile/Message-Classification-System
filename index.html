@@ -3,17 +3,20 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Cube Class</title>
+  <title>短信分类工作台</title>
   <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
   <header class="topbar">
-    <div>
-      <p class="eyebrow">KAIQIAOKEJI</p>
-      <h1>Cube Class</h1>
+    <div class="brand">
+      <span class="brand-mark">C</span>
+      <div>
+        <p class="eyebrow">KAIQIAO</p>
+        <h1>短信分类工作台</h1>
+      </div>
     </div>
     <div class="top-actions">
-      <button type="button">cdl</button>
+      <button type="button" class="user-button">cdl</button>
       <button type="button">设置</button>
       <button>退出登录</button>
     </div>
@@ -25,7 +28,7 @@
         <div class="panel-title">
           <div>
             <h2>短信分类</h2>
-            <p>支持单条及批量上传</p>
+            <p>单条/多条短信分类，下面的框中显示当前选中的分类短信内容~</p>
           </div>
         </div>
         <textarea id="smsInput" spellcheck="false">【这里可以填入单条短信进行分类】</textarea>
@@ -36,22 +39,22 @@
           </div>
           <div class="param-grid">
             <div class="param-field">
-              <label for="minNewWordLength">新词最小长度</label>
+              <label for="minNewWordLength">新词最小长</label>
               <input id="minNewWordLength" type="number" min="2" max="8" value="2">
             </div>
             <div class="param-field">
-              <label for="maxNewWordLength">新词最大长度</label>
+              <label for="maxNewWordLength">新词最大长</label>
               <input id="maxNewWordLength" type="number" min="2" max="12" value="8">
             </div>
             <div class="param-field">
-              <label for="confidenceThreshold">分类置信度门限</label>
+              <label for="confidenceThreshold">新词阈值</label>
               <input id="confidenceThreshold" type="number" min="0.7" max="1" step="0.01" value="0.70">
             </div>
           </div>
-          <p id="parameterSummary" class="param-summary">默认参数：模型地址使用内置规则；新词长度 2-8 字；置信度低于 0.70 归为其他并进入人工审核。</p>
+          <p id="parameterSummary" class="param-summary">模型默认内置模型；新词长度2-8字；置信度低于0.7人工审核新词</p>
         </div>
         <div class="toolbar">
-          <button id="analyzeBtn" class="primary">运行分类</button>
+          <button id="analyzeBtn" class="primary">分类</button>
           <button>批量上传</button>
           <button id="clearBtn" class="secondary">清空</button>
         </div>
@@ -98,6 +101,7 @@
               <h2>样本列表</h2>
               <p>点击任意样本查看该短信的分类、新词检测</p>
             </div>
+            <div class="sample-summary">*** 共 928 条待审核样本 · 最后更新：今日 11:23 ***</div>
           </div>
           <div id="overviewSampleList" class="overview-sample-list"></div>
         </div>
@@ -105,7 +109,7 @@
         <div id="singleSampleDetails" class="single-sample-details" hidden>
           <div class="result-grid">
             <article class="result-card emphasis">
-              <p class="metric-label">短信类别</p>
+              <p class="metric-label">分类结果</p>
               <h2 id="labelResult">-</h2>
               <div class="confidence">
                 <span>置信度</span>
@@ -114,12 +118,12 @@
               <div class="bar-track"><div id="confidenceBar" class="bar-fill"></div></div>
             </article>
             <article class="result-card">
-              <p class="metric-label">新词检测</p>
+              <p class="metric-label">新词结果</p>
               <h2 id="newWordFlag">-</h2>
               <p id="newWordSummary" class="muted">等待分析</p>
             </article>
             <article class="result-card">
-              <p class="metric-label">变异检测</p>
+              <p class="metric-label">变异词</p>
               <h2 id="variantFlag">-</h2>
               <p id="variantSummary" class="muted">等待分析</p>
             </article>
@@ -141,7 +145,7 @@
               </label>
               <button id="saveCorrection" class="primary" type="button">保存修正</button>
             </div>
-            <p id="correctionStatus" class="correction-status">人工修正会覆盖该样本的最终展示分类。</p>
+            <p id="correctionStatus" class="correction-status">人工修正会覆盖自动分类结果</p>
           </div>
 
         </div>
