@@ -3,14 +3,14 @@ const labels = [
 ];
 
 const categoryStats = [
-  { label: "授信成功", count: 100, color: "#22c55e" },
-  { label: "逾期未还", displayLabel: "逾期", count: 30, color: "#fb7185" },
-  { label: "放款成功", count: 150, color: "#38bdf8" },
-  { label: "催收", count: 10, color: "#f59e0b" },
-  { label: "营销", count: 299, color: "#a78bfa" },
-  { label: "授信失败", count: 50, color: "#f97316" },
-  { label: "还款成功", count: 120, color: "#14b8a6" },
-  { label: "放款失败", count: 67, color: "#ef4444" }
+  { label: "授信成功", count: 100, color: "#7dd3fc" },
+  { label: "逾期未还", displayLabel: "逾期", count: 30, color: "#f9a8d4" },
+  { label: "放款成功", count: 150, color: "#a7f3d0" },
+  { label: "催收", count: 10, color: "#fde68a" },
+  { label: "营销", count: 299, color: "#c4b5fd" },
+  { label: "授信失败", count: 50, color: "#fdba74" },
+  { label: "还款成功", count: 120, color: "#67e8f9" },
+  { label: "放款失败", count: 67, color: "#fca5a5" }
 ];
 
 const categoryTotal = categoryStats.reduce((sum, item) => sum + item.count, 0);
