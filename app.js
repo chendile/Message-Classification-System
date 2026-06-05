@@ -19,7 +19,7 @@ const supervisedTrainingRounds = [
   {
     round: 1,
     time: "2026/6/16 10:00",
-    words: ["授信获批", "到账金额", "本期账单"],
+    words: ["支付宝", "最高额度", "花呗", "授信失败"],
     macroF1: 0.812,
     accuracy: 0.824,
     macroRecall: 0.798
@@ -27,7 +27,7 @@ const supervisedTrainingRounds = [
   {
     round: 2,
     time: "2026/6/16 10:12",
-    words: ["银行卡异常", "重新提交", "放款失败"],
+    words: ["授信申请", "已获批", "已逾期", "提额包"],
     macroF1: 0.838,
     accuracy: 0.849,
     macroRecall: 0.826
@@ -35,7 +35,7 @@ const supervisedTrainingRounds = [
   {
     round: 3,
     time: "2026/6/16 10:25",
-    words: ["逾期账单", "今日处理", "影响征信"],
+    words: ["放款失败", "综合评分", "扣款成功", "很抱歉"],
     macroF1: 0.861,
     accuracy: 0.872,
     macroRecall: 0.854
@@ -43,7 +43,7 @@ const supervisedTrainingRounds = [
   {
     round: 4,
     time: "2026/6/16 10:37",
-    words: ["专享福利", "免费领取", "回复退订"],
+    words: ["逾期金额", "授信获批", "本次授信失败", "到账金额"],
     macroF1: 0.884,
     accuracy: 0.891,
     macroRecall: 0.875
@@ -51,7 +51,7 @@ const supervisedTrainingRounds = [
   {
     round: 5,
     time: "2026/6/16 10:50",
-    words: ["综合评分", "授信失败", "暂不符合"],
+    words: ["支付宝", "最高额度", "综合评分", "逾期金额"],
     macroF1: 0.907,
     accuracy: 0.913,
     macroRecall: 0.899
@@ -93,27 +93,35 @@ const variantMap = {
   "放欵": "放款"
 };
 
-let dictionary = {
-  "授信获批": 0.92,
-  "放款成功": 0.90,
-  "还款成功": 0.87,
-  "逾期金额": 0.84,
-  "催收专员": 0.81,
-  "提额包": 0.76,
-  "征信影响": 0.74,
-  "到账金额": 0.72,
-  "老客户专享": 0.69,
-  "账户状态": 0.66,
-  "额度通知": 0.64,
-  "本期账单": 0.62
+const mainDictionarySeed = {
+  "授信申请": 0.89,
+  "授信失败": 0.91,
+  "已获批": 0.88,
+  "最高额度": 0.95,
+  "放款失败": 0.82,
+  "支付宝": 0.99,
+  "花呗": 0.92,
+  "已逾期": 0.87,
+  "提额包": 0.85
 };
 
-let observation = {
-  "获批额度": 0.48,
-  "领取额度": 0.42,
-  "后续流程": 0.39,
-  "退订": 0.34
+const observationSeed = {
+  "很抱歉": 0.72,
+  "综合评分": 0.75,
+  "授信获批": 0.67,
+  "本次授信失败": 0.65,
+  "到账金额": 0.63,
+  "扣款成功": 0.74,
+  "逾期金额": 0.72
 };
+
+let dictionary = { ...mainDictionarySeed };
+let observation = { ...observationSeed };
+
+const newWordDictionary = [
+  ...Object.entries(mainDictionarySeed).map(([word, score]) => ({ word, score, source: "main" })),
+  ...Object.entries(observationSeed).map(([word, score]) => ({ word, score, source: "observe" }))
+];
 
 const initialDictionaryWords = new Set([
   ...Object.keys(dictionary),
@@ -252,41 +260,20 @@ function computeModalWeights(features) {
   return Object.fromEntries(Object.entries(raw).map(([key, value]) => [key, value / total]));
 }
 
-function discoverCandidates(text, normalized, features, classification, config = runtimeConfig) {
-  const tokens = normalized.match(/[\u4e00-\u9fa5]{2,12}|[a-zA-Z0-9]+|\[链接\]/g) || [];
-  const candidates = new Map();
-
-  const addCandidate = (word, attentionBoost = 0) => {
-    if (!word || word.length < config.minNewWordLength || word.length > config.maxNewWordLength) return;
-    if (/^\d+$/.test(word)) return;
-    const attention = clamp(0.48 + attentionBoost + keywordAttention(word, classification.label), 0.18, 0.98);
-    const pmi = clamp(0.35 + uniqueRatio(word) * 0.38 + (normalized.includes(word) ? 0.12 : 0), 0.2, 0.96);
-    const entropy = clamp(0.30 + Math.min(word.length, 6) * 0.08 + (features.link.hasLink ? 0.04 : 0), 0.16, 0.92);
-    const labelGuidance = clamp(0.34 + keywordAttention(word, classification.label) * 0.8, 0.22, 0.96);
-    const trust = clamp(attention * 0.30 + pmi * 0.25 + entropy * 0.20 + labelGuidance * 0.25, 0, 1);
-    candidates.set(word, { word, attention, pmi, entropy, labelGuidance, trust, trusted: trust >= 0.6, inDictionary: isInExistingDictionary(word) });
-  };
-
-  tokens.forEach(token => addCandidate(token, 0.05));
-  for (let i = 0; i < tokens.length - 1; i += 1) {
-    addCandidate(tokens[i] + tokens[i + 1], 0.10);
-  }
-
-  const fixedTerms = [
-    "授信获批", "获批额度", "领取额度", "额度通知", "征信影响", "综合评分", "授信失败",
-    "放款成功", "到账金额", "款项到账", "放款失败", "银行卡异常", "重新提交",
-    "还款成功", "扣款成功", "本期账单", "账户状态", "账单结清",
-    "逾期金额", "逾期账单", "今日处理", "影响征信", "滞纳风险",
-    "催收专员", "后续流程", "欠款处理", "立即联系",
-    "老客户专享", "专享福利", "提额包", "额度福利", "回复退订", "免费领取"
-  ];
-  fixedTerms.forEach(term => {
-    if (text.includes(term.slice(0, 2)) || normalized.includes(term.slice(0, 2))) addCandidate(term, 0.16);
-  });
-
-  return [...candidates.values()]
-    .sort((a, b) => b.trust - a.trust)
-    .slice(0, 20);
+function discoverCandidates() {
+  return newWordDictionary
+    .map(item => ({
+      word: item.word,
+      attention: item.score,
+      pmi: item.score,
+      entropy: item.score,
+      labelGuidance: item.score,
+      trust: item.score,
+      trusted: item.source === "main",
+      inDictionary: item.source === "main",
+      source: item.source
+    }))
+    .sort((a, b) => b.trust - a.trust);
 }
 
 function isInExistingDictionary(word) {
@@ -309,36 +296,11 @@ function keywordAttention(word, label) {
 }
 
 function updateDictionary(candidates) {
-  const graduated = [];
-  const observed = [];
-  const decayed = [];
-  candidates.forEach(candidate => {
-    if (candidate.trusted) {
-      if (dictionary[candidate.word]) {
-        dictionary[candidate.word] = clamp(dictionary[candidate.word] + 0.04, 0, 1);
-      } else if ((observation[candidate.word] || 0) + candidate.trust >= 0.7) {
-        dictionary[candidate.word] = clamp((observation[candidate.word] || 0) + candidate.trust * 0.35, 0.62, 0.95);
-        delete observation[candidate.word];
-        graduated.push(candidate.word);
-      } else {
-        observation[candidate.word] = clamp((observation[candidate.word] || 0) + candidate.trust * 0.32, 0, 0.69);
-        observed.push(candidate.word);
-      }
-    } else if (!dictionary[candidate.word]) {
-      observation[candidate.word] = Math.max(observation[candidate.word] || 0, candidate.trust * 0.5);
-      observed.push(candidate.word);
-    }
-  });
-
-  Object.keys(dictionary).forEach(word => {
-    const hit = candidates.some(candidate => candidate.word === word);
-    if (!hit) {
-      dictionary[word] = clamp(dictionary[word] * 0.995, 0.3, 1);
-      decayed.push(word);
-    }
-  });
-
-  return { graduated, observed, decayed };
+  return {
+    graduated: candidates.filter(item => item.source === "main").map(item => item.word),
+    observed: candidates.filter(item => item.source === "observe").map(item => item.word),
+    decayed: []
+  };
 }
 
 function analyze() {
@@ -473,7 +435,7 @@ function seedTaskLogs() {
       user: "cdl",
       time: "2026/5/18 09:20:11",
       type: "短信分类",
-      words: ["观察：领取额度", "观察：获批额度", "衰减：到账金额"],
+      words: ["主词典：最高额度：95%", "主词典：已获批：88%", "观察区：授信获批：67%"],
       model: defaultModelName,
       params: "新词 2-6 字；门限 0.80",
       sampleId: "sample-0"
@@ -482,7 +444,7 @@ function seedTaskLogs() {
       user: "zhangmin",
       time: "2026/5/24 14:41:36",
       type: "短信分类",
-      words: ["观察：银行卡异常", "观察：重新提交", "衰减：老客户专享"],
+      words: ["主词典：放款失败：82%", "观察区：到账金额：63%", "观察区：综合评分：75%"],
       model: defaultModelName,
       params: "新词 3-5 字；门限 0.85",
       sampleId: "sample-3"
@@ -491,7 +453,7 @@ function seedTaskLogs() {
       user: "liwen",
       time: "2026/5/31 10:05:49",
       type: "手动词典更新",
-      words: ["踢出：观察区：退订", "踢出：观察区：后续流程"],
+      words: ["观察区：很抱歉：72%", "观察区：本次授信失败：65%"],
       model: defaultModelName,
       params: "新词 4-7 字；门限 0.82",
       sampleId: "sample-7"
@@ -500,7 +462,7 @@ function seedTaskLogs() {
       user: "wangyu",
       time: "2026/6/7 16:32:18",
       type: "短信分类",
-      words: ["观察：逾期账单", "观察：今日处理", "晋升：逾期金额"],
+      words: ["主词典：已逾期：87%", "观察区：逾期金额：72%", "主词典：花呗：92%"],
       model: defaultModelName,
       params: "新词 3-8 字；门限 0.88",
       sampleId: "sample-5"
@@ -509,7 +471,7 @@ function seedTaskLogs() {
       user: "chenqi",
       time: "2026/6/15 11:08:03",
       type: "手动词典更新",
-      words: ["踢出：主词典：额度通知", "踢出：观察区：获批额度"],
+      words: ["主词典：授信申请：89%", "主词典：支付宝：99%", "观察区：扣款成功：74%"],
       model: defaultModelName,
       params: "新词 2-5 字；门限 0.80",
       sampleId: "sample-0"
@@ -522,8 +484,8 @@ function seedTaskLogs() {
 function logDictionaryIteration(result) {
   const linkedEntries = getLinkedDictionaryEntries(result);
   const changedWords = [
-    ...linkedEntries.main.map(([word]) => `主词典：${word}`),
-    ...linkedEntries.observe.map(([word]) => `观察区：${word}`)
+    ...linkedEntries.main.map(([word, score]) => `主词典：${word}：${percent(score)}`),
+    ...linkedEntries.observe.map(([word, score]) => `观察区：${word}：${percent(score)}`)
   ];
   addTaskLog({
     type: "短信分类",
@@ -569,14 +531,13 @@ function renderTaskWords(words) {
   `;
 }
 
-function getLinkedWords(result, fallbackWords) {
-  if (!result) return fallbackWords;
-  const words = [
-    ...result.candidates.map(item => item.word),
-    ...result.variants.map(item => item.standard),
-    result.classification.label
-  ];
-  return [...new Set(words)].filter(Boolean).slice(0, 5);
+function getLinkedWords(result, roundIndex = 0) {
+  const candidates = result?.candidates || discoverCandidates();
+  const chunkSize = 4;
+  const start = roundIndex * chunkSize;
+  const chunk = candidates.slice(start, start + chunkSize);
+  return (chunk.length ? chunk : candidates.slice(0, chunkSize))
+    .map(item => `${item.word}：${percent(item.trust)}`);
 }
 
 function renderTrainingTimeline(result = lastResult) {
@@ -586,7 +547,7 @@ function renderTrainingTimeline(result = lastResult) {
     const previous = supervisedTrainingRounds[index - 1];
     const f1Delta = previous ? round.macroF1 - previous.macroF1 : 0;
     const accDelta = previous ? round.accuracy - previous.accuracy : 0;
-    const linkedWords = getLinkedWords(result, round.words);
+    const linkedWords = getLinkedWords(result, index);
     return `
       <article class="training-round">
         <div class="round-marker">
@@ -761,7 +722,7 @@ function renderCandidates(candidates) {
   const search = document.querySelector("#candidateSearch")?.value.trim() || "";
   const hideKnown = document.querySelector("#hideKnownTerms")?.checked || false;
   const filtered = candidates
-    .map(item => ({ ...item, inDictionary: isInExistingDictionary(item.word) }))
+    .map(item => ({ ...item, inDictionary: item.source === "main" }))
     .filter(item => !search || item.word.includes(search))
     .filter(item => !hideKnown || !item.inDictionary)
     .sort((a, b) => b.trust - a.trust);
@@ -769,26 +730,18 @@ function renderCandidates(candidates) {
   const rows = filtered.length ? filtered.map(item => `
     <tr>
       <td><strong>${item.word}</strong></td>
-      <td>${percent(item.attention)}</td>
-      <td>${percent(item.pmi)}</td>
-      <td>${percent(item.entropy)}</td>
-      <td>${percent(item.labelGuidance)}</td>
       <td><span class="score-pill">${percent(item.trust)}</span></td>
-      <td><span class="dict-pill ${item.inDictionary ? "exists" : ""}">${item.inDictionary ? "是" : "否"}</span></td>
-      <td>${item.inDictionary ? "<span class='highlight'>主词典</span>" : "<span class='warn'>观察区</span>"}</td>
+      <td><span class="dict-pill ${item.inDictionary ? "exists" : ""}">${item.source === "main" ? "主词典" : "观察区"}</span></td>
+      <td>${item.source === "main" ? "<span class='highlight'>主词典</span>" : "<span class='warn'>观察区</span>"}</td>
     </tr>
-  `).join("") : `<tr><td colspan="8">暂无候选新词</td></tr>`;
+  `).join("") : `<tr><td colspan="4">暂无候选新词</td></tr>`;
   document.querySelector("#candidateRows").innerHTML = rows;
 }
 
 function getLinkedDictionaryEntries(result = lastResult) {
   if (!result) return { main: [], observe: [] };
   const entries = result.candidates.reduce((groups, item) => {
-    const inMain = isInExistingDictionary(item.word);
-    const score = inMain
-      ? dictionary[item.word] || item.trust
-      : observation[item.word] || item.trust;
-    groups[inMain ? "main" : "observe"].push([item.word, score]);
+    groups[item.source === "main" ? "main" : "observe"].push([item.word, item.trust]);
     return groups;
   }, { main: [], observe: [] });
 
@@ -820,12 +773,11 @@ function renderDictionary(result = lastResult) {
   const linkedEntries = getLinkedDictionaryEntries(result);
   mainDict.innerHTML = linkedEntries.main.length
     ? renderWord(linkedEntries.main, "main")
-    : "<p class='muted'>当前短信暂无候选新词升入主词典</p>";
+    : "<p class='muted'>暂无主词典新词</p>";
   observeDict.innerHTML = linkedEntries.observe.length
     ? renderWord(linkedEntries.observe, "observe")
-    : "<p class='muted'>当前短信暂无候选新词留在观察区</p>";
+    : "<p class='muted'>暂无观察区新词</p>";
   document.querySelector("#lifecycleLog").innerHTML = `
-    当前短信：${selectedSample ? selectedSample.text : result?.text || "未选择短信"}<br>
     升入主词典：<span class="highlight">${linkedEntries.main.length ? linkedEntries.main.map(([word]) => word).join("、") : "无"}</span>；
     观察区：${linkedEntries.observe.length ? linkedEntries.observe.map(([word]) => word).join("、") : "无"}。
   `;
