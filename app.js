@@ -15,6 +15,60 @@ const categoryStats = [
 
 const categoryTotal = categoryStats.reduce((sum, item) => sum + item.count, 0);
 
+const supervisedTrainingRounds = [
+  {
+    round: 1,
+    time: "2026/6/16 10:00",
+    words: ["授信获批", "到账金额", "本期账单"],
+    macroF1: 0.812,
+    accuracy: 0.824,
+    macroRecall: 0.798
+  },
+  {
+    round: 2,
+    time: "2026/6/16 10:12",
+    words: ["银行卡异常", "重新提交", "放款失败"],
+    macroF1: 0.838,
+    accuracy: 0.849,
+    macroRecall: 0.826
+  },
+  {
+    round: 3,
+    time: "2026/6/16 10:25",
+    words: ["逾期账单", "今日处理", "影响征信"],
+    macroF1: 0.861,
+    accuracy: 0.872,
+    macroRecall: 0.854
+  },
+  {
+    round: 4,
+    time: "2026/6/16 10:37",
+    words: ["专享福利", "免费领取", "回复退订"],
+    macroF1: 0.884,
+    accuracy: 0.891,
+    macroRecall: 0.875
+  },
+  {
+    round: 5,
+    time: "2026/6/16 10:50",
+    words: ["综合评分", "授信失败", "暂不符合"],
+    macroF1: 0.907,
+    accuracy: 0.913,
+    macroRecall: 0.899
+  }
+];
+
+const supervisedTrainingResults = [
+  { text: "授信已获批，额度可领取", truth: "授信成功", prediction: "授信成功", confidence: 0.94 },
+  { text: "综合评分暂不符合要求", truth: "授信失败", prediction: "授信失败", confidence: 0.91 },
+  { text: "借款已放款成功，请查收", truth: "放款成功", prediction: "放款成功", confidence: 0.93 },
+  { text: "银行卡异常导致放款失败", truth: "放款失败", prediction: "放款失败", confidence: 0.89 },
+  { text: "账单已逾期，请今日处理", truth: "逾期未还", prediction: "逾期未还", confidence: 0.92 },
+  { text: "本期账单扣款成功", truth: "还款成功", prediction: "还款成功", confidence: 0.90 },
+  { text: "请联系催收专员处理欠款", truth: "催收", prediction: "催收", confidence: 0.88 },
+  { text: "老客户专享福利，回复退订", truth: "营销", prediction: "营销", confidence: 0.95 }
+];
+
 const samples = [
   { label: "授信成功", text: "【额度通知】您的授信已获批，最高额度50000元，点击 https://q9x.cn/a 领取，逾qi将影响征信。" },
   { label: "授信失败", text: "很抱歉，您的授信申请未通过，本次授信失败，原因是综合评分暂不符合要求。" },
@@ -70,6 +124,15 @@ const initialDictionaryWords = new Set([
 
 let todayCount = 0;
 let lastResult = null;
+let selectedSample = null;
+let corrections = {};
+let runtimeConfig = getRuntimeConfig();
+let dictionaryEditMode = false;
+let taskLogs = [];
+let taskSequence = 0;
+let resultSequence = 0;
+const currentUser = "cdl";
+const defaultModelName = "默认：内置规则模型";
 
 const colors = {
   text: "#315f9d",
@@ -131,7 +194,7 @@ function countKeywordHits(text) {
   return words.filter(word => text.includes(word));
 }
 
-function classify(normalized, features, variants) {
+function classify(normalized, features, variants, config = runtimeConfig) {
   const scores = Object.fromEntries(labels.map(label => [label, 0.06]));
   const rules = [
     ["授信成功", ["授信", "获批", "额度", "通过"], 0.21],
@@ -171,9 +234,11 @@ function classify(normalized, features, variants) {
   }
 
   const maxScore = Math.max(...Object.values(scores));
-  const label = Object.entries(scores).sort((a, b) => b[1] - a[1])[0][0];
+  const predictedLabel = Object.entries(scores).sort((a, b) => b[1] - a[1])[0][0];
   const confidence = clamp(0.48 + maxScore / 1.55, 0.54, 0.97);
-  return { label, confidence, scores };
+  const belowThreshold = confidence < config.confidenceThreshold;
+  const label = belowThreshold ? "其他" : predictedLabel;
+  return { label, predictedLabel, confidence, scores, belowThreshold };
 }
 
 function computeModalWeights(features) {
@@ -187,12 +252,12 @@ function computeModalWeights(features) {
   return Object.fromEntries(Object.entries(raw).map(([key, value]) => [key, value / total]));
 }
 
-function discoverCandidates(text, normalized, features, classification) {
-  const tokens = normalized.match(/[\u4e00-\u9fa5]{2,8}|[a-zA-Z0-9]+|\[链接\]/g) || [];
+function discoverCandidates(text, normalized, features, classification, config = runtimeConfig) {
+  const tokens = normalized.match(/[\u4e00-\u9fa5]{2,12}|[a-zA-Z0-9]+|\[链接\]/g) || [];
   const candidates = new Map();
 
   const addCandidate = (word, attentionBoost = 0) => {
-    if (!word || word.length < 2 || word.length > 8) return;
+    if (!word || word.length < config.minNewWordLength || word.length > config.maxNewWordLength) return;
     if (/^\d+$/.test(word)) return;
     const attention = clamp(0.48 + attentionBoost + keywordAttention(word, classification.label), 0.18, 0.98);
     const pmi = clamp(0.35 + uniqueRatio(word) * 0.38 + (normalized.includes(word) ? 0.12 : 0), 0.2, 0.96);
@@ -280,16 +345,20 @@ function analyze() {
   const text = document.querySelector("#smsInput").value.trim();
   if (!text) return;
 
+  runtimeConfig = getRuntimeConfig();
+  renderParameterSummary(runtimeConfig);
   const normalizedResult = normalizeText(text);
   const features = extractFeatures(text, normalizedResult.normalized);
-  const classification = classify(normalizedResult.normalized, features, normalizedResult.variants);
+  const classification = classify(normalizedResult.normalized, features, normalizedResult.variants, runtimeConfig);
   const modalWeights = computeModalWeights(features);
-  const candidates = discoverCandidates(text, normalizedResult.normalized, features, classification);
+  const candidates = discoverCandidates(text, normalizedResult.normalized, features, classification, runtimeConfig);
   const lifecycle = updateDictionary(candidates);
   const risk = computeRisk(features, normalizedResult.variants, classification);
 
   todayCount += 1;
-  lastResult = { text, ...normalizedResult, features, classification, modalWeights, candidates, lifecycle, risk };
+  const resultId = `result-${++resultSequence}`;
+  lastResult = { resultId, text, ...normalizedResult, features, classification, modalWeights, candidates, lifecycle, risk, config: runtimeConfig, sampleId: selectedSample?.id || "" };
+  logDictionaryIteration(lastResult);
   renderAll(lastResult);
 }
 
@@ -305,19 +374,22 @@ function computeRisk(features, variants, classification) {
 }
 
 function renderAll(result) {
-  document.querySelector("#todayCount").textContent = todayCount;
-  document.querySelector("#dictSize").textContent = Object.keys(dictionary).length;
-  document.querySelector("#observeSize").textContent = Object.keys(observation).length;
+  setText("#todayCount", todayCount);
+  setText("#dictSize", Object.keys(dictionary).length);
+  setText("#observeSize", Object.keys(observation).length);
   renderOverview(result);
   renderCandidates(result.candidates);
   renderDictionary(result.lifecycle);
   renderIterationGraph(result);
+  renderTaskLogs();
 }
 
 function renderOverview(result) {
   const pct = Math.round(result.classification.confidence * 100);
+  const correction = selectedSample ? corrections[selectedSample.id] : null;
+  const finalLabel = correction?.manualLabel || result.classification.label;
   document.querySelector("#singleSamplePreview").textContent = result.text;
-  document.querySelector("#labelResult").textContent = result.classification.label;
+  document.querySelector("#labelResult").textContent = finalLabel;
   document.querySelector("#confidenceText").textContent = `${pct}%`;
   document.querySelector("#confidenceBar").style.width = `${pct}%`;
   document.querySelector("#newWordFlag").textContent = result.candidates.some(item => item.trusted) ? "含可信新词" : "未确认";
@@ -329,8 +401,318 @@ function renderOverview(result) {
     ? result.variants.map(item => `${item.variant}->${item.standard}`).join("，")
     : "文本未命中形近字、同音字或拼音混写规则";
   document.querySelector("#riskLevel").textContent = `${result.risk.level}风险`;
-  document.querySelector("#riskSummary").textContent = `综合风险分 ${Math.round(result.risk.score * 100)}，由链接、变异、紧急符号和业务类型共同决定`;
+  document.querySelector("#riskSummary").textContent = result.classification.belowThreshold
+    ? `置信度低于门限 ${formatPercent(result.config.confidenceThreshold)}，自动归为其他并进入人工审核`
+    : `综合风险分 ${Math.round(result.risk.score * 100)}，由链接、变异、紧急符号和业务类型共同决定`;
+  renderCorrectionPanel(result);
 
+}
+
+function getRuntimeConfig() {
+  const minInput = document.querySelector("#minNewWordLength");
+  const maxInput = document.querySelector("#maxNewWordLength");
+  const thresholdInput = document.querySelector("#confidenceThreshold");
+  const modelInput = document.querySelector("#modelEndpoint");
+  const minNewWordLength = clamp(Number(minInput?.value || 2), 2, 12);
+  const maxNewWordLength = clamp(Number(maxInput?.value || 8), minNewWordLength, 12);
+  const confidenceThreshold = clamp(Number(thresholdInput?.value || 0.7), 0.7, 1);
+  return {
+    modelEndpoint: (modelInput?.value || "").trim() || "默认：内置规则模型",
+    minNewWordLength,
+    maxNewWordLength,
+    confidenceThreshold
+  };
+}
+
+function renderParameterSummary(config) {
+  document.querySelector("#minNewWordLength").value = config.minNewWordLength;
+  document.querySelector("#maxNewWordLength").value = config.maxNewWordLength;
+  document.querySelector("#confidenceThreshold").value = config.confidenceThreshold.toFixed(2);
+  document.querySelector("#parameterSummary").textContent =
+    `当前参数：模型地址 ${config.modelEndpoint}；新词长度 ${config.minNewWordLength}-${config.maxNewWordLength} 字；置信度低于 ${config.confidenceThreshold.toFixed(2)} 归为其他并进入人工审核。`;
+}
+
+function renderCorrectionPanel(result) {
+  const panel = document.querySelector("#manualCorrection");
+  if (!selectedSample) {
+    panel.hidden = true;
+    return;
+  }
+
+  const correction = corrections[selectedSample.id];
+  panel.hidden = false;
+  const auditText = result.classification.belowThreshold ? `，原预测：${result.classification.predictedLabel}` : "";
+  document.querySelector("#autoLabelText").textContent = `自动标注：${result.classification.label}${auditText}，置信度 ${percent(result.classification.confidence)}`;
+  document.querySelector("#correctedLabel").value = correction?.manualLabel || result.classification.label;
+  document.querySelector("#correctionReason").value = correction?.reason || "";
+  setCorrectionStatus(
+    correction
+      ? `已人工修正为：${correction.manualLabel}。`
+      : "人工修正会覆盖该样本的最终展示分类。",
+    correction ? "saved" : ""
+  );
+}
+
+function setCorrectionStatus(message, type = "") {
+  const status = document.querySelector("#correctionStatus");
+  status.textContent = message;
+  status.classList.remove("saved", "error");
+  if (type) status.classList.add(type);
+}
+
+function addTaskLog(entry) {
+  taskLogs.unshift({
+    id: `task-${++taskSequence}`,
+    user: currentUser,
+    time: new Date().toLocaleString("zh-CN", { hour12: false }),
+    ...entry
+  });
+  taskLogs = taskLogs.slice(0, 60);
+}
+
+function seedTaskLogs() {
+  const baseTasks = [
+    {
+      user: "cdl",
+      time: "2026/5/18 09:20:11",
+      type: "短信分类",
+      words: ["观察：领取额度", "观察：获批额度", "衰减：到账金额"],
+      model: defaultModelName,
+      params: "新词 2-6 字；门限 0.80",
+      sampleId: "sample-0"
+    },
+    {
+      user: "zhangmin",
+      time: "2026/5/24 14:41:36",
+      type: "短信分类",
+      words: ["观察：银行卡异常", "观察：重新提交", "衰减：老客户专享"],
+      model: defaultModelName,
+      params: "新词 3-5 字；门限 0.85",
+      sampleId: "sample-3"
+    },
+    {
+      user: "liwen",
+      time: "2026/5/31 10:05:49",
+      type: "手动词典更新",
+      words: ["踢出：观察区：退订", "踢出：观察区：后续流程"],
+      model: defaultModelName,
+      params: "新词 4-7 字；门限 0.82",
+      sampleId: "sample-7"
+    },
+    {
+      user: "wangyu",
+      time: "2026/6/7 16:32:18",
+      type: "短信分类",
+      words: ["观察：逾期账单", "观察：今日处理", "晋升：逾期金额"],
+      model: defaultModelName,
+      params: "新词 3-8 字；门限 0.88",
+      sampleId: "sample-5"
+    },
+    {
+      user: "chenqi",
+      time: "2026/6/15 11:08:03",
+      type: "手动词典更新",
+      words: ["踢出：主词典：额度通知", "踢出：观察区：获批额度"],
+      model: defaultModelName,
+      params: "新词 2-5 字；门限 0.80",
+      sampleId: "sample-0"
+    }
+  ];
+
+  taskLogs = baseTasks.map(task => ({ id: `task-${++taskSequence}`, ...task }));
+}
+
+function logDictionaryIteration(result) {
+  const changedWords = [
+    ...result.lifecycle.graduated.map(word => `晋升：${word}`),
+    ...result.lifecycle.observed.slice(0, 8).map(word => `观察：${word}`),
+    ...result.lifecycle.decayed.slice(0, 6).map(word => `衰减：${word}`)
+  ];
+  addTaskLog({
+    type: "短信分类",
+    words: changedWords.length ? changedWords : ["本轮无词典变更"],
+    model: result.config.modelEndpoint,
+    params: formatConfig(result.config),
+    resultLabel: result.classification.label,
+    sampleId: result.sampleId,
+    resultId: result.resultId
+  });
+}
+
+function formatConfig(config) {
+  return `新词 ${config.minNewWordLength}-${config.maxNewWordLength} 字；门限 ${config.confidenceThreshold.toFixed(2)}`;
+}
+
+function renderTaskLogs() {
+  const taskRows = document.querySelector("#taskRows");
+  if (!taskRows) return;
+  taskRows.innerHTML = taskLogs.length ? taskLogs.map(log => `
+    <tr>
+      <td>${log.user}</td>
+      <td>${log.time}</td>
+      <td><strong>${log.type}</strong></td>
+      <td>${renderTaskWords(log.words)}</td>
+      <td>${log.model}</td>
+      <td>${log.params}</td>
+      <td><button class="task-link" type="button" data-sample-id="${log.sampleId || ""}">查看结果</button></td>
+    </tr>
+  `).join("") : `<tr><td colspan="7">暂无任务记录</td></tr>`;
+}
+
+function renderTaskWords(words) {
+  const list = words.length ? words : ["无修改词"];
+  return `
+    <details class="task-word-list">
+      <summary>${list.length} 项修改</summary>
+      ${list.map(word => `<div>${word}</div>`).join("")}
+    </details>
+  `;
+}
+
+function renderTrainingTimeline() {
+  const container = document.querySelector("#trainingTimeline");
+  if (!container) return;
+  container.innerHTML = supervisedTrainingRounds.map((round, index) => {
+    const previous = supervisedTrainingRounds[index - 1];
+    const f1Delta = previous ? round.macroF1 - previous.macroF1 : 0;
+    const accDelta = previous ? round.accuracy - previous.accuracy : 0;
+    return `
+      <article class="training-round">
+        <div class="round-marker">
+          <span>第 ${round.round} 轮</span>
+          <strong>${round.time}</strong>
+        </div>
+        <div class="round-body">
+          <div class="round-head">
+            <h3>第 ${round.round} 轮监督训练</h3>
+            <span>更新 ${round.words.length} 个词</span>
+          </div>
+          <div class="round-words">
+            ${round.words.map(word => `<span>${word}</span>`).join("")}
+          </div>
+          <div class="metric-grid">
+            ${renderTrainingMetric("Macro-F1", round.macroF1, f1Delta, true)}
+            ${renderTrainingMetric("Accuracy", round.accuracy, accDelta)}
+            ${renderTrainingMetric("Macro-Recall", round.macroRecall, previous ? round.macroRecall - previous.macroRecall : 0)}
+          </div>
+        </div>
+      </article>
+    `;
+  }).join("");
+}
+
+function renderTrainingMetric(name, value, delta, primary = false) {
+  const deltaText = delta > 0 ? `+${(delta * 100).toFixed(1)}%` : "基线";
+  return `
+    <div class="training-metric ${primary ? "primary-metric" : ""}">
+      <span>${name}</span>
+      <strong>${(value * 100).toFixed(1)}%</strong>
+      <em>${deltaText}</em>
+    </div>
+  `;
+}
+
+function startSupervisedTraining() {
+  const status = document.querySelector("#trainingStatus");
+  const result = document.querySelector("#trainingResult");
+  status.textContent = "训练结束，已生成时间轴和分类结果。";
+  status.classList.add("done");
+  result.hidden = false;
+  renderTrainingTimeline();
+  renderTrainingClassificationResults();
+}
+
+function renderTrainingClassificationResults() {
+  document.querySelector("#trainingClassRows").innerHTML = supervisedTrainingResults.map(item => `
+    <tr>
+      <td>${item.text}</td>
+      <td>${item.truth}</td>
+      <td>${item.prediction}</td>
+      <td>${percent(item.confidence)}</td>
+      <td>${item.truth === item.prediction ? "<span class='highlight'>正确</span>" : "<span class='warn'>错误</span>"}</td>
+    </tr>
+  `).join("");
+}
+
+function initTrainingControls() {
+  document.querySelector("#startTraining").addEventListener("click", startSupervisedTraining);
+  document.querySelector("#trainingFile").addEventListener("change", event => {
+    const file = event.target.files[0];
+    document.querySelector("#trainingFileName").textContent = file ? `已选择：${file.name}` : "已选择：supervised_samples_20260616.csv";
+  });
+}
+
+function openTaskResult(sampleId) {
+  activateTab("overview");
+  if (sampleId) {
+    const sampleButton = document.querySelector(`.overview-sample-item[data-sample-id="${sampleId}"]`);
+    if (sampleButton) {
+      sampleButton.click();
+      return;
+    }
+  }
+  document.querySelector("#singleSampleDetails").hidden = false;
+}
+
+async function loadCorrections() {
+  try {
+    const response = await fetch("/api/corrections");
+    if (!response.ok) throw new Error("load failed");
+    const payload = await response.json();
+    corrections = payload.corrections || {};
+  } catch (error) {
+    corrections = {};
+  }
+}
+
+async function saveManualCorrection() {
+  if (!selectedSample || !lastResult) return;
+
+  const manualLabel = document.querySelector("#correctedLabel").value;
+  const reason = document.querySelector("#correctionReason").value.trim();
+  const correction = {
+    sampleId: selectedSample.id,
+    text: selectedSample.text,
+    autoLabel: lastResult.classification.label,
+    manualLabel,
+    confidence: lastResult.classification.confidence,
+    reason,
+    source: "manual",
+    correctedAt: new Date().toISOString()
+  };
+
+  try {
+    const response = await fetch("/api/corrections", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(correction)
+    });
+    if (!response.ok) throw new Error("save failed");
+    const payload = await response.json();
+    corrections[payload.correction.sampleId] = payload.correction;
+    logManualCorrection(correction);
+    renderOverview(lastResult);
+    renderTaskLogs();
+    setCorrectionStatus(`已保存人工修正：${manualLabel}。`, "saved");
+  } catch (error) {
+    corrections[correction.sampleId] = correction;
+    logManualCorrection(correction);
+    renderOverview(lastResult);
+    renderTaskLogs();
+    setCorrectionStatus("后端未连接，已仅在当前页面临时生效。请用 node server.js 启动后端后保存。", "error");
+  }
+}
+
+function logManualCorrection(correction) {
+  addTaskLog({
+    type: "短信分类",
+    words: [`${correction.autoLabel} -> ${correction.manualLabel}`, correction.reason ? `说明：${correction.reason}` : "无修正说明"],
+    model: runtimeConfig.modelEndpoint,
+    params: formatConfig(runtimeConfig),
+    resultLabel: correction.manualLabel,
+    sampleId: correction.sampleId,
+    resultId: lastResult?.resultId || ""
+  });
 }
 
 function renderCategoryOverview() {
@@ -382,24 +764,67 @@ function renderCandidates(candidates) {
 }
 
 function renderDictionary(lifecycle = { graduated: [], observed: [] }) {
-  const renderWord = entries => entries
+  const renderWord = (entries, source) => entries
     .sort((a, b) => b[1] - a[1])
     .map(([word, score]) => `
       <div class="dict-bar-row">
         <span class="dict-word" title="${word}">${word}</span>
         <div class="dict-track"><span class="dict-fill" style="width:${Math.round(score * 100)}%"></span></div>
         <strong class="dict-score">${percent(score)}</strong>
+        <label class="dict-remove">
+          <input type="checkbox" class="dict-remove-check" data-source="${source}" data-word="${word}">
+          踢出
+        </label>
       </div>
     `)
     .join("");
 
-  document.querySelector("#mainDict").innerHTML = renderWord(Object.entries(dictionary));
-  document.querySelector("#observeDict").innerHTML = renderWord(Object.entries(observation));
+  const mainDict = document.querySelector("#mainDict");
+  const observeDict = document.querySelector("#observeDict");
+  mainDict.classList.toggle("editing", dictionaryEditMode);
+  observeDict.classList.toggle("editing", dictionaryEditMode);
+  document.querySelector("#toggleDictEdit").textContent = dictionaryEditMode ? "退出人工调整" : "人工调整词典";
+  document.querySelector("#applyDictEdit").disabled = !dictionaryEditMode;
+  mainDict.innerHTML = renderWord(Object.entries(dictionary), "main");
+  observeDict.innerHTML = renderWord(Object.entries(observation), "observe");
   document.querySelector("#lifecycleLog").innerHTML = `
     本轮晋升：<span class="highlight">${lifecycle.graduated.length ? lifecycle.graduated.join("、") : "无"}</span>；
     本轮观察：${lifecycle.observed.length ? lifecycle.observed.slice(0, 8).join("、") : "无"}。
     词典策略：观察区累计置信度达到 0.70 后进入主词典，未命中的主词按衰减因子 0.995 轻量衰减。
   `;
+}
+
+function toggleDictionaryEdit() {
+  dictionaryEditMode = !dictionaryEditMode;
+  renderDictionary(lastResult?.lifecycle);
+}
+
+function applyDictionaryEdit() {
+  const checkedItems = [...document.querySelectorAll(".dict-remove-check:checked")];
+  const removedWords = checkedItems.map(item => `${item.dataset.source === "main" ? "主词典" : "观察区"}：${item.dataset.word}`);
+  checkedItems.forEach(item => {
+    if (item.dataset.source === "main") {
+      delete dictionary[item.dataset.word];
+    } else {
+      delete observation[item.dataset.word];
+    }
+  });
+  if (removedWords.length) {
+    addTaskLog({
+      type: "手动词典更新",
+      words: removedWords.map(word => `踢出：${word}`),
+      model: runtimeConfig.modelEndpoint,
+      params: formatConfig(runtimeConfig),
+      resultLabel: lastResult?.classification.label || "-",
+      sampleId: lastResult?.sampleId || "",
+      resultId: lastResult?.resultId || ""
+    });
+  }
+  dictionaryEditMode = false;
+  renderDictionary(lastResult?.lifecycle);
+  renderCandidates(lastResult?.candidates || []);
+  if (lastResult) renderIterationGraph(lastResult);
+  renderTaskLogs();
 }
 
 function renderIterationGraph(result) {
@@ -469,7 +894,7 @@ function initOverviewSamples() {
   const details = document.querySelector("#singleSampleDetails");
 
   list.innerHTML = samples.map((sample, index) => `
-    <button class="overview-sample-item" data-index="${index}" type="button">
+    <button class="overview-sample-item" data-index="${index}" data-sample-id="sample-${index}" type="button">
       <strong>${sample.label}</strong>
       <span>${sample.text}</span>
       <b>查看</b>
@@ -484,7 +909,9 @@ function initOverviewSamples() {
       });
       button.classList.add("active");
       button.querySelector("b").textContent = "已选中";
-      const sample = samples[Number(button.dataset.index)];
+      const sampleIndex = Number(button.dataset.index);
+      const sample = samples[sampleIndex];
+      selectedSample = { id: `sample-${sampleIndex}`, ...sample };
       document.querySelector("#smsInput").value = sample.text;
       button.insertAdjacentElement("afterend", details);
       analyze();
@@ -493,15 +920,33 @@ function initOverviewSamples() {
   });
 }
 
+function initCorrectionControls() {
+  document.querySelector("#correctedLabel").innerHTML = labels
+    .map(label => `<option value="${label}">${label}</option>`)
+    .join("");
+  document.querySelector("#saveCorrection").addEventListener("click", saveManualCorrection);
+}
+
+function initParameterControls() {
+  ["#modelEndpoint", "#minNewWordLength", "#maxNewWordLength", "#confidenceThreshold"].forEach(selector => {
+    document.querySelector(selector).addEventListener("input", () => {
+      renderParameterSummary(getRuntimeConfig());
+    });
+  });
+  renderParameterSummary(runtimeConfig);
+}
+
 function initTabs() {
   document.querySelectorAll(".tab").forEach(tab => {
     tab.addEventListener("click", () => {
-      document.querySelectorAll(".tab").forEach(item => item.classList.remove("active"));
-      document.querySelectorAll(".tab-view").forEach(view => view.classList.remove("active"));
-      tab.classList.add("active");
-      document.querySelector(`#${tab.dataset.tab}`).classList.add("active");
+      activateTab(tab.dataset.tab);
     });
   });
+}
+
+function activateTab(tabId) {
+  document.querySelectorAll(".tab").forEach(item => item.classList.toggle("active", item.dataset.tab === tabId));
+  document.querySelectorAll(".tab-view").forEach(view => view.classList.toggle("active", view.id === tabId));
 }
 
 function initCandidateFilters() {
@@ -512,6 +957,18 @@ function initCandidateFilters() {
   };
   search.addEventListener("input", refresh);
   hideKnown.addEventListener("change", refresh);
+}
+
+function initDictionaryControls() {
+  document.querySelector("#toggleDictEdit").addEventListener("click", toggleDictionaryEdit);
+  document.querySelector("#applyDictEdit").addEventListener("click", applyDictionaryEdit);
+}
+
+function initTaskLogControls() {
+  document.querySelector("#taskRows").addEventListener("click", event => {
+    const button = event.target.closest(".task-link");
+    if (button) openTaskResult(button.dataset.sampleId);
+  });
 }
 
 function roundRect(ctx, x, y, width, height, radius) {
@@ -544,15 +1001,32 @@ function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
+function setText(selector, value) {
+  const element = document.querySelector(selector);
+  if (element) element.textContent = value;
+}
+
 document.querySelector("#analyzeBtn").addEventListener("click", analyze);
 document.querySelector("#clearBtn").addEventListener("click", () => {
   document.querySelector("#smsInput").value = "";
 });
 
-initSamples();
-renderCategoryOverview();
-initOverviewSamples();
-initTabs();
-initCandidateFilters();
-renderDictionary();
-analyze();
+async function initApp() {
+  seedTaskLogs();
+  initSamples();
+  renderCategoryOverview();
+  initOverviewSamples();
+  initCorrectionControls();
+  initParameterControls();
+  initTabs();
+  initCandidateFilters();
+  initDictionaryControls();
+  initTaskLogControls();
+  initTrainingControls();
+  await loadCorrections();
+  startSupervisedTraining();
+  renderDictionary();
+  analyze();
+}
+
+initApp();

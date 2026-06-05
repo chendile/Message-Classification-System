@@ -12,17 +12,10 @@
       <p class="eyebrow">KAIQIAOKEJI</p>
       <h1>Cube Class</h1>
     </div>
-    <div style="margin-right: 100px;margin-left: 300px;">
-      <span>**   欢迎cdl登录系统    **</span>
-    </div>
-    <div class="status-strip" aria-label="系统运行状态">
-      <span><b id="modelState">在线</b>模型状态</span>
-      <span><b id="dictSize">12</b>主词典</span>
-      <span><b id="observeSize">4</b>观察区</span>
-      <span><b id="todayCount">0</b>今日分析</span>
-    </div>
-    <div>
-      <button>登录</button>
+    <div class="top-actions">
+      <button type="button">cdl</button>
+      <button type="button">设置</button>
+      <button>退出登录</button>
     </div>
   </header>
 
@@ -36,6 +29,27 @@
           </div>
         </div>
         <textarea id="smsInput" spellcheck="false">【额度通知】您的授信已获批，最高额度50000元，点击 https://q9x.cn/a 领取，逾qi将影响征信。</textarea>
+        <div class="parameter-panel">
+          <div class="param-field">
+            <label for="modelEndpoint">模型地址来源</label>
+            <input id="modelEndpoint" type="text" placeholder="默认：http://127.0.0.1:3000/api/classify">
+          </div>
+          <div class="param-grid">
+            <div class="param-field">
+              <label for="minNewWordLength">新词最小长度</label>
+              <input id="minNewWordLength" type="number" min="2" max="8" value="2">
+            </div>
+            <div class="param-field">
+              <label for="maxNewWordLength">新词最大长度</label>
+              <input id="maxNewWordLength" type="number" min="2" max="12" value="8">
+            </div>
+            <div class="param-field">
+              <label for="confidenceThreshold">分类置信度门限</label>
+              <input id="confidenceThreshold" type="number" min="0.7" max="1" step="0.01" value="0.70">
+            </div>
+          </div>
+          <p id="parameterSummary" class="param-summary">默认参数：模型地址使用内置规则；新词长度 2-8 字；置信度低于 0.70 归为其他并进入人工审核。</p>
+        </div>
         <div class="toolbar">
           <button id="analyzeBtn" class="primary">运行分类</button>
           <button>批量上传</button>
@@ -54,6 +68,8 @@
         <button class="tab" data-tab="newwords">新词发现</button>
         <button class="tab" data-tab="dictionary">动态词典</button>
         <button class="tab" data-tab="explain">迭代图谱</button>
+        <button class="tab" data-tab="tasks">任务查看</button>
+        <button class="tab" data-tab="training">监督训练</button>
       </nav>
 
       <section id="overview" class="tab-view active">
@@ -123,6 +139,25 @@
             </article>
           </div>
 
+          <div id="manualCorrection" class="manual-correction">
+            <div>
+              <h3>人工修正分类</h3>
+              <p id="autoLabelText">自动标注：-</p>
+            </div>
+            <div class="correction-controls">
+              <label>
+                修正类别
+                <select id="correctedLabel"></select>
+              </label>
+              <label>
+                修正说明
+                <input id="correctionReason" type="text" placeholder="可填写修正原因">
+              </label>
+              <button id="saveCorrection" class="primary" type="button">保存修正</button>
+            </div>
+            <p id="correctionStatus" class="correction-status">人工修正会覆盖该样本的最终展示分类。</p>
+          </div>
+
         </div>
       </section>
 
@@ -161,8 +196,14 @@
 
       <section id="dictionary" class="tab-view">
         <div class="section-head">
-          <h2>置信度加权词典</h2>
-          <p>候选词进入观察区，达到阈值后晋升主词典，长期未命中自动衰减</p>
+          <div>
+            <h2>置信度加权词典</h2>
+            <p>候选词进入观察区，达到阈值后晋升主词典，长期未命中自动衰减</p>
+          </div>
+          <div class="dict-actions">
+            <button id="toggleDictEdit" type="button">人工调整词典</button>
+            <button id="applyDictEdit" class="primary" type="button" disabled>更新词典</button>
+          </div>
         </div>
         <div class="dict-layout">
           <div>
@@ -183,6 +224,66 @@
           <p>展示每轮迭代中新词进入观察区、晋升主词典和词典衰减保留的过程</p>
         </div>
         <div id="iterationGraph" class="iteration-graph"></div>
+      </section>
+
+      <section id="tasks" class="tab-view">
+        <div class="section-head">
+          <div>
+            <h2>任务查看</h2>
+            <p>记录词典更新、人工修正、参数配置和分类结果查看入口</p>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="task-table">
+            <thead>
+              <tr>
+                <th>操作人</th>
+                <th>时间点</th>
+                <th>任务类型</th>
+                <th>修改词</th>
+                <th>模型</th>
+                <th>参数</th>
+                <th>分类结果</th>
+              </tr>
+            </thead>
+            <tbody id="taskRows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="training" class="tab-view">
+        <div class="section-head">
+          <div>
+            <h2>监督训练</h2>
+            <p>已选择带标签样本并完成本次监督训练，展示同一次训练内的词典更新和分类结果</p>
+          </div>
+        </div>
+        <div class="training-panel">
+          <div class="training-upload">
+            <label for="trainingFile" class="file-trigger">选择样本文件</label>
+            <input id="trainingFile" type="file" accept=".csv,.json,.txt">
+            <span id="trainingFileName">已选择：supervised_samples_20260616.csv</span>
+          </div>
+          <button id="startTraining" class="primary" type="button">重新训练</button>
+        </div>
+        <p id="trainingStatus" class="training-status done">训练结束，已生成时间轴和分类结果。</p>
+        <div id="trainingResult" class="training-result">
+          <div id="trainingTimeline" class="training-timeline"></div>
+          <div class="table-wrap training-result-table">
+            <table>
+              <thead>
+                <tr>
+                  <th>样本</th>
+                  <th>真实标签</th>
+                  <th>预测标签</th>
+                  <th>置信度</th>
+                  <th>结果</th>
+                </tr>
+              </thead>
+              <tbody id="trainingClassRows"></tbody>
+            </table>
+          </div>
+        </div>
       </section>
     </section>
   </main>
