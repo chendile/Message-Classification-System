@@ -59,8 +59,8 @@ const supervisedTrainingRounds = [
 ];
 
 const supervisedTrainingResults = [
-  { text: "授信已获批，额度可领取", truth: "授信成功", prediction: "授信成功", confidence: 0.94 },
   { text: "综合评分暂不符合要求", truth: "授信失败", prediction: "授信失败", confidence: 0.91 },
+  { text: "授信已获批，额度可领取", truth: "授信成功", prediction: "授信成功", confidence: 0.94 },
   { text: "借款已放款成功，请查收", truth: "放款成功", prediction: "放款成功", confidence: 0.93 },
   { text: "银行卡异常导致放款失败", truth: "放款失败", prediction: "放款失败", confidence: 0.89 },
   { text: "账单已逾期，请今日处理", truth: "逾期未还", prediction: "逾期未还", confidence: 0.92 },
@@ -70,8 +70,8 @@ const supervisedTrainingResults = [
 ];
 
 const samples = [
-  { label: "授信成功", text: "【额度通知】您的授信已获批，最高额度50000元，点击 https://q9x.cn/a 领取，逾qi将影响征信。" },
   { label: "授信失败", text: "很抱歉，您的授信申请未通过，本次授信失败，原因是综合评分暂不符合要求。" },
+  { label: "授信成功", text: "【额度通知】您的授信已获批，最高额度50000元，点击 https://q9x.cn/a 领取，逾qi将影响征信。" },
   { label: "放款成功", text: "您申请的借款已放款成功，到账金额12000元，请注意查收并按期还款。" },
   { label: "放款失败", text: "您的借款放款失败，银行卡异常导致款项未到账，请核对信息后重新提交。" },
   { label: "还款成功", text: "本期账单已扣款成功，还款金额3260元，账户状态正常。" },
