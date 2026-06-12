@@ -123,6 +123,8 @@ const newWordDictionary = [
   ...Object.entries(observationSeed).map(([word, score]) => ({ word, score, source: "observe" }))
 ];
 
+const existingVocabularyWords = new Set(["已逾期", "花呗", "综合评分"]);
+
 const initialDictionaryWords = new Set([
   ...Object.keys(dictionary),
   ...Object.keys(observation),
@@ -262,17 +264,23 @@ function computeModalWeights(features) {
 
 function discoverCandidates() {
   return newWordDictionary
-    .map(item => ({
-      word: item.word,
-      attention: item.score,
-      pmi: item.score,
-      entropy: item.score,
-      labelGuidance: item.score,
-      trust: item.score,
-      trusted: item.source === "main",
-      inDictionary: item.source === "main",
-      source: item.source
-    }))
+    .map(item => {
+      const textFeature = clamp(item.score + (item.source === "main" ? 0.03 : 0.02), 0, 1);
+      const contribution = clamp(item.score - 0.02, 0, 1);
+      const boundary = clamp(item.score + (item.word.length >= 4 ? 0.01 : -0.01), 0, 1);
+      const categoryRelated = clamp(item.score * 4 - textFeature - contribution - boundary, 0, 1);
+      return {
+        word: item.word,
+        attention: textFeature,
+        pmi: contribution,
+        entropy: boundary,
+        labelGuidance: categoryRelated,
+        trust: item.score,
+        trusted: item.source === "main",
+        inDictionary: existingVocabularyWords.has(item.word),
+        source: item.source
+      };
+    })
     .sort((a, b) => b.trust - a.trust);
 }
 
@@ -738,7 +746,7 @@ function renderCandidates(candidates) {
   const search = document.querySelector("#candidateSearch")?.value.trim() || "";
   const hideKnown = document.querySelector("#hideKnownTerms")?.checked || false;
   const filtered = candidates
-    .map(item => ({ ...item, inDictionary: item.source === "main" }))
+    .map(item => ({ ...item, inDictionary: existingVocabularyWords.has(item.word) }))
     .filter(item => !search || item.word.includes(search))
     .filter(item => !hideKnown || !item.inDictionary)
     .sort((a, b) => b.trust - a.trust);
@@ -746,11 +754,15 @@ function renderCandidates(candidates) {
   const rows = filtered.length ? filtered.map(item => `
     <tr>
       <td><strong>${item.word}</strong></td>
+      <td>${percent(item.attention)}</td>
+      <td>${percent(item.pmi)}</td>
+      <td>${percent(item.entropy)}</td>
+      <td>${percent(item.labelGuidance)}</td>
       <td><span class="score-pill">${percent(item.trust)}</span></td>
-      <td><span class="dict-pill ${item.inDictionary ? "exists" : ""}">${item.source === "main" ? "主词典" : "观察区"}</span></td>
+      <td><span class="dict-pill ${item.inDictionary ? "exists" : ""}">${item.inDictionary ? "是" : "否"}</span></td>
       <td>${item.source === "main" ? "<span class='highlight'>主词典</span>" : "<span class='warn'>观察区</span>"}</td>
     </tr>
-  `).join("") : `<tr><td colspan="4">暂无候选新词</td></tr>`;
+  `).join("") : `<tr><td colspan="8">暂无候选新词</td></tr>`;
   document.querySelector("#candidateRows").innerHTML = rows;
 }
 
