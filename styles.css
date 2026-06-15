@@ -437,6 +437,19 @@ button:hover {
   gap: 9px;
 }
 
+.variant-list-panel {
+  margin-top: 16px;
+}
+
+.compact-head {
+  margin-bottom: 10px;
+}
+
+.compact-head h3 {
+  margin: 0 0 4px;
+  font-size: 16px;
+}
+
 .legend-item {
   display: grid;
   grid-template-columns: 14px minmax(74px, 1fr) 72px 64px;

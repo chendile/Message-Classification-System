@@ -62,6 +62,7 @@
       <nav class="tabs" aria-label="系统视图">
         <button class="tab active" data-tab="overview">分类总览</button>
         <button class="tab" data-tab="newwords">新词发现</button>
+        <button class="tab" data-tab="variants">变异词</button>
         <button class="tab" data-tab="dictionary">动态词典</button>
         <button class="tab" data-tab="tasks">任务查看</button>
         <button class="tab" data-tab="training">监督训练</button>
@@ -150,7 +151,7 @@
         <div class="section-head">
           <div>
             <h2>新词分析</h2>
-            <p>识别短信中的候选新词，并给出可信度与词表状态</p>
+            <p>识别最近一次分类任务的短信中的候选新词，并给出可信度与词表状态</p>
           </div>
           <div class="candidate-tools">
             <input id="candidateSearch" type="search" placeholder="查询候选词">
@@ -176,6 +177,55 @@
             </thead>
             <tbody id="candidateRows"></tbody>
           </table>
+        </div>
+      </section>
+
+      <section id="variants" class="tab-view">
+        <div class="section-head">
+          <div>
+            <h2>变异词词表</h2>
+            <p>默认展示最近一次分类任务中新发现的变异词，并自动加入变异词词表</p>
+          </div>
+          <div class="dict-actions">
+            <button id="toggleVariantList" type="button">展示词表</button>
+            <button id="removeVariants" class="primary" type="button">踢出选中</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>变异词</th>
+                <th>标准词</th>
+                <th>来源</th>
+                <th>置信度</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="recentVariantRows"></tbody>
+          </table>
+        </div>
+        <div id="variantListPanel" class="variant-list-panel" hidden>
+          <div class="section-head compact-head">
+            <div>
+              <h3>完整变异词词表</h3>
+              <p>包含既有金融类变体和最近一次分类任务新发现的变异词</p>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>变异词</th>
+                  <th>标准词</th>
+                  <th>来源</th>
+                  <th>置信度</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="variantRows"></tbody>
+            </table>
+          </div>
         </div>
       </section>
 

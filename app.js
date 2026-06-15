@@ -93,6 +93,41 @@ const variantMap = {
   "放欵": "放款"
 };
 
+const existingVariantEntries = [
+  { variant: "授x", standard: "授信", confidence: 0.86 },
+  { variant: "授莘", standard: "授信", confidence: 0.84 },
+  { variant: "额渡", standard: "额度", confidence: 0.88 },
+  { variant: "额d", standard: "额度", confidence: 0.82 },
+  { variant: "放kuan", standard: "放款", confidence: 0.90 },
+  { variant: "放欵", standard: "放款", confidence: 0.93 },
+  { variant: "还kuan", standard: "还款", confidence: 0.89 },
+  { variant: "还欵", standard: "还款", confidence: 0.91 },
+  { variant: "逾其", standard: "逾期", confidence: 0.87 },
+  { variant: "逾q", standard: "逾期", confidence: 0.85 },
+  { variant: "征芯", standard: "征信", confidence: 0.92 },
+  { variant: "征x", standard: "征信", confidence: 0.86 },
+  { variant: "贷欵", standard: "贷款", confidence: 0.91 },
+  { variant: "代款", standard: "贷款", confidence: 0.88 },
+  { variant: "借kuan", standard: "借款", confidence: 0.89 },
+  { variant: "扣欵", standard: "扣款", confidence: 0.87 },
+  { variant: "到帐", standard: "到账", confidence: 0.94 },
+  { variant: "银hang", standard: "银行", confidence: 0.86 },
+  { variant: "支fu宝", standard: "支付宝", confidence: 0.90 },
+  { variant: "花bei", standard: "花呗", confidence: 0.89 },
+  { variant: "提e", standard: "提额", confidence: 0.84 },
+  { variant: "福li", standard: "福利", confidence: 0.83 },
+  { variant: "免息f", standard: "免息", confidence: 0.82 },
+  { variant: "催收z", standard: "催收", confidence: 0.85 }
+].map(item => ({ ...item, source: "既有词表" }));
+
+const recentVariantEntries = [
+  { variant: "逾qi", standard: "逾期", confidence: 0.90, source: "最近一次分类" },
+  { variant: "催sh", standard: "催收", confidence: 0.90, source: "最近一次分类" },
+  { variant: "免fei", standard: "免费", confidence: 0.95, source: "最近一次分类" }
+];
+
+let variantDictionaryEntries = [...recentVariantEntries, ...existingVariantEntries];
+
 const mainDictionarySeed = {
   "授信申请": 0.89,
   "授信失败": 0.91,
@@ -351,6 +386,7 @@ function renderAll(result) {
   renderCandidates(result.candidates);
   renderDictionary(result);
   renderIterationGraph(result);
+  renderVariantDictionary();
   renderTrainingTimeline(result);
   renderTrainingClassificationResults(result);
   renderTaskLogs();
@@ -824,6 +860,50 @@ function renderCandidates(candidates) {
   document.querySelector("#candidateRows").innerHTML = rows;
 }
 
+function renderVariantRows(entries) {
+  return entries.length ? entries.map(item => `
+    <tr>
+      <td><strong>${item.variant}</strong></td>
+      <td>${item.standard}</td>
+      <td>${item.source}</td>
+      <td><span class="score-pill">${percent(item.confidence)}</span></td>
+      <td>
+        <label class="dict-remove">
+          <input type="checkbox" class="variant-remove-check" data-variant="${item.variant}">
+          踢出
+        </label>
+      </td>
+    </tr>
+  `).join("") : `<tr><td colspan="5">暂无变异词</td></tr>`;
+}
+
+function renderVariantDictionary() {
+  const recentRows = document.querySelector("#recentVariantRows");
+  const allRows = document.querySelector("#variantRows");
+  if (!recentRows || !allRows) return;
+
+  const recentVariants = new Set(recentVariantEntries.map(item => item.variant));
+  const activeRecent = variantDictionaryEntries.filter(item => recentVariants.has(item.variant));
+  recentRows.innerHTML = renderVariantRows(activeRecent);
+  allRows.innerHTML = renderVariantRows(variantDictionaryEntries);
+}
+
+function toggleVariantList() {
+  const panel = document.querySelector("#variantListPanel");
+  const button = document.querySelector("#toggleVariantList");
+  const isHidden = panel.hidden;
+  panel.hidden = !isHidden;
+  button.textContent = isHidden ? "收起词表" : "展示词表";
+}
+
+function removeSelectedVariants() {
+  const checkedItems = [...document.querySelectorAll(".variant-remove-check:checked")];
+  if (!checkedItems.length) return;
+  const removedVariants = new Set(checkedItems.map(item => item.dataset.variant));
+  variantDictionaryEntries = variantDictionaryEntries.filter(item => !removedVariants.has(item.variant));
+  renderVariantDictionary();
+}
+
 function getLinkedDictionaryEntries(result = lastResult) {
   if (!result) return { main: [], observe: [] };
   const entries = result.candidates.reduce((groups, item) => {
@@ -1030,6 +1110,11 @@ function initDictionaryControls() {
   document.querySelector("#applyDictEdit").addEventListener("click", applyDictionaryEdit);
 }
 
+function initVariantControls() {
+  document.querySelector("#toggleVariantList").addEventListener("click", toggleVariantList);
+  document.querySelector("#removeVariants").addEventListener("click", removeSelectedVariants);
+}
+
 function initTaskLogControls() {
   document.querySelector("#taskRows").addEventListener("click", event => {
     const button = event.target.closest(".task-link");
@@ -1086,6 +1171,7 @@ async function initApp() {
   initTabs();
   initCandidateFilters();
   initDictionaryControls();
+  initVariantControls();
   initTaskLogControls();
   initTrainingControls();
   await loadCorrections();
