@@ -173,6 +173,7 @@ let selectedSample = null;
 let corrections = {};
 let runtimeConfig = getRuntimeConfig();
 let dictionaryEditMode = false;
+let variantEditMode = false;
 let taskLogs = [];
 let taskSequence = 0;
 let resultSequence = 0;
@@ -884,6 +885,11 @@ function renderVariantDictionary() {
 
   const recentVariants = new Set(recentVariantEntries.map(item => item.variant));
   const activeRecent = variantDictionaryEntries.filter(item => recentVariants.has(item.variant));
+  document.querySelectorAll(".variant-table").forEach(table => {
+    table.classList.toggle("editing", variantEditMode);
+  });
+  document.querySelector("#toggleVariantEdit").textContent = variantEditMode ? "退出人工调整" : "人工调整词典";
+  document.querySelector("#removeVariants").disabled = !variantEditMode;
   recentRows.innerHTML = renderVariantRows(activeRecent);
   allRows.innerHTML = renderVariantRows(variantDictionaryEntries);
 }
@@ -901,6 +907,12 @@ function removeSelectedVariants() {
   if (!checkedItems.length) return;
   const removedVariants = new Set(checkedItems.map(item => item.dataset.variant));
   variantDictionaryEntries = variantDictionaryEntries.filter(item => !removedVariants.has(item.variant));
+  variantEditMode = false;
+  renderVariantDictionary();
+}
+
+function toggleVariantEdit() {
+  variantEditMode = !variantEditMode;
   renderVariantDictionary();
 }
 
@@ -1111,6 +1123,7 @@ function initDictionaryControls() {
 }
 
 function initVariantControls() {
+  document.querySelector("#toggleVariantEdit").addEventListener("click", toggleVariantEdit);
   document.querySelector("#toggleVariantList").addEventListener("click", toggleVariantList);
   document.querySelector("#removeVariants").addEventListener("click", removeSelectedVariants);
 }

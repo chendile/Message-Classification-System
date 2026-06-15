@@ -187,12 +187,13 @@
             <p>默认展示最近一次分类任务中新发现的变异词，并自动加入变异词词表</p>
           </div>
           <div class="dict-actions">
+            <button id="toggleVariantEdit" type="button">人工调整词典</button>
             <button id="toggleVariantList" type="button">展示词表</button>
-            <button id="removeVariants" class="primary" type="button">踢出选中</button>
+            <button id="removeVariants" class="primary" type="button" disabled>确认踢除</button>
           </div>
         </div>
         <div class="table-wrap">
-          <table>
+          <table class="variant-table">
             <thead>
               <tr>
                 <th>变异词</th>
@@ -213,7 +214,7 @@
             </div>
           </div>
           <div class="table-wrap">
-            <table>
+            <table class="variant-table">
               <thead>
                 <tr>
                   <th>变异词</th>
