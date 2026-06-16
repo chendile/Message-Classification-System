@@ -246,6 +246,7 @@ function keywordAttention(word, label) {
 function updateDictionary(candidates) {
   const graduated = [];
   const observed = [];
+  const decayed = [];
   candidates.forEach(candidate => {
     if (candidate.trusted) {
       if (dictionary[candidate.word]) {
@@ -266,10 +267,13 @@ function updateDictionary(candidates) {
 
   Object.keys(dictionary).forEach(word => {
     const hit = candidates.some(candidate => candidate.word === word);
-    if (!hit) dictionary[word] = clamp(dictionary[word] * 0.995, 0.3, 1);
+    if (!hit) {
+      dictionary[word] = clamp(dictionary[word] * 0.995, 0.3, 1);
+      decayed.push(word);
+    }
   });
 
-  return { graduated, observed };
+  return { graduated, observed, decayed };
 }
 
 function analyze() {
@@ -307,7 +311,7 @@ function renderAll(result) {
   renderOverview(result);
   renderCandidates(result.candidates);
   renderDictionary(result.lifecycle);
-  renderExplain(result);
+  renderIterationGraph(result);
 }
 
 function renderOverview(result) {
@@ -398,20 +402,50 @@ function renderDictionary(lifecycle = { graduated: [], observed: [] }) {
   `;
 }
 
-function renderExplain(result) {
-  const topWords = [...result.candidates].slice(0, 4).map(item => item.word);
-  const cards = [
-    ["分类依据", `该短信被分类为 <span class="highlight">【${result.classification.label}】</span>，置信度 ${percent(result.classification.confidence)}。模型主要依据 ${topWords.length ? topWords.join("、") : "业务关键词"} 等高注意力词元。`],
-    ["多模态证据", `数值模态检测到 ${result.features.numeric.amountCount} 个金额/数字信号，符号模态检测到 ${result.features.symbol.symbolCount} 个特殊符号，链接模态${result.features.link.hasLink ? "检测到链接且参与风险判断" : "未检测到链接"}。`],
-    ["新词与变异", `${result.candidates.some(c => c.trusted) ? `可信新词包括 ${result.candidates.filter(c => c.trusted).map(c => c.word).join("、")}` : "暂无候选词超过可信阈值"}；${result.variants.length ? `变异词还原为 ${result.variants.map(v => `${v.variant}->${v.standard}`).join("、")}` : "未发现对抗变异词"}。`],
-    ["闭环更新", result.lifecycle.graduated.length ? `本轮已将 ${result.lifecycle.graduated.join("、")} 注入分类词表，并模拟扩展词嵌入矩阵。` : "本轮候选词暂存观察区，等待后续样本累计置信度后再注入词表。"]
-  ];
-  document.querySelector("#explainBox").innerHTML = cards.map(card => `
-    <article class="explain-card">
-      <h3>${card[0]}</h3>
-      <p>${card[1]}</p>
+function renderIterationGraph(result) {
+  const candidates = [...result.candidates].sort((a, b) => b.trust - a.trust);
+  const candidateWords = candidates.slice(0, 8).map(item => `${item.word} ${percent(item.trust)}`);
+  const observedWords = result.lifecycle.observed.slice(0, 8);
+  const graduatedWords = result.lifecycle.graduated.slice(0, 8);
+  const decayedWords = result.lifecycle.decayed.slice(0, 8);
+  const retainedWords = Object.entries(dictionary)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 6)
+    .map(([word, score]) => `${word} ${percent(score)}`);
+
+  document.querySelector("#iterationGraph").innerHTML = `
+    <div class="graph-canvas">
+      <svg class="graph-lines" viewBox="0 0 1000 430" preserveAspectRatio="none" aria-hidden="true">
+        <path d="M180 105 C300 105 300 105 420 105" />
+        <path d="M180 105 C300 210 300 210 420 210" />
+        <path d="M580 210 C700 210 700 105 820 105" />
+        <path d="M580 310 C700 310 700 310 820 310" />
+      </svg>
+      ${renderGraphNode("候选新词", "从本轮短信中抽取", candidateWords, "source")}
+      ${renderGraphNode("观察区", "可信值累计，等待阈值", observedWords, "observe")}
+      ${renderGraphNode("主词典", "达到阈值后注入词表", graduatedWords.length ? graduatedWords : retainedWords, "main")}
+      ${renderGraphNode("衰减保留", "本轮未命中，置信度轻量衰减", decayedWords, "decay")}
+    </div>
+    <div class="graph-summary">
+      <span>本轮候选 <strong>${candidates.length}</strong></span>
+      <span>进入观察区 <strong>${result.lifecycle.observed.length}</strong></span>
+      <span>晋升主词典 <strong>${result.lifecycle.graduated.length}</strong></span>
+      <span>衰减保留 <strong>${result.lifecycle.decayed.length}</strong></span>
+    </div>
+  `;
+}
+
+function renderGraphNode(title, subtitle, words, type) {
+  const items = words.length
+    ? words.map(word => `<li>${word}</li>`).join("")
+    : "<li>本轮无</li>";
+  return `
+    <article class="graph-node ${type}">
+      <h3>${title}</h3>
+      <p>${subtitle}</p>
+      <ul>${items}</ul>
     </article>
-  `).join("");
+  `;
 }
 
 function initSamples() {
