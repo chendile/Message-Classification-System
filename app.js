@@ -61,6 +61,13 @@ let observation = {
   "退订": 0.34
 };
 
+const initialDictionaryWords = new Set([
+  ...Object.keys(dictionary),
+  ...Object.keys(observation),
+  "点击",
+  "领取"
+]);
+
 let todayCount = 0;
 let lastResult = null;
 
@@ -181,19 +188,18 @@ function computeModalWeights(features) {
 }
 
 function discoverCandidates(text, normalized, features, classification) {
-  const known = new Set(Object.keys(dictionary));
   const tokens = normalized.match(/[\u4e00-\u9fa5]{2,8}|[a-zA-Z0-9]+|\[链接\]/g) || [];
   const candidates = new Map();
 
   const addCandidate = (word, attentionBoost = 0) => {
-    if (!word || word.length < 2 || word.length > 8 || known.has(word)) return;
+    if (!word || word.length < 2 || word.length > 8) return;
     if (/^\d+$/.test(word)) return;
     const attention = clamp(0.48 + attentionBoost + keywordAttention(word, classification.label), 0.18, 0.98);
     const pmi = clamp(0.35 + uniqueRatio(word) * 0.38 + (normalized.includes(word) ? 0.12 : 0), 0.2, 0.96);
     const entropy = clamp(0.30 + Math.min(word.length, 6) * 0.08 + (features.link.hasLink ? 0.04 : 0), 0.16, 0.92);
     const labelGuidance = clamp(0.34 + keywordAttention(word, classification.label) * 0.8, 0.22, 0.96);
     const trust = clamp(attention * 0.30 + pmi * 0.25 + entropy * 0.20 + labelGuidance * 0.25, 0, 1);
-    candidates.set(word, { word, attention, pmi, entropy, labelGuidance, trust, trusted: trust >= 0.6 });
+    candidates.set(word, { word, attention, pmi, entropy, labelGuidance, trust, trusted: trust >= 0.6, inDictionary: isInExistingDictionary(word) });
   };
 
   tokens.forEach(token => addCandidate(token, 0.05));
@@ -201,14 +207,25 @@ function discoverCandidates(text, normalized, features, classification) {
     addCandidate(tokens[i] + tokens[i + 1], 0.10);
   }
 
-  const fixedTerms = ["授信获批", "获批额度", "到账金额", "逾期金额", "催收专员", "征信影响", "老客户专享", "提额包", "领取额度"];
+  const fixedTerms = [
+    "授信获批", "获批额度", "领取额度", "额度通知", "征信影响", "综合评分", "授信失败",
+    "放款成功", "到账金额", "款项到账", "放款失败", "银行卡异常", "重新提交",
+    "还款成功", "扣款成功", "本期账单", "账户状态", "账单结清",
+    "逾期金额", "逾期账单", "今日处理", "影响征信", "滞纳风险",
+    "催收专员", "后续流程", "欠款处理", "立即联系",
+    "老客户专享", "专享福利", "提额包", "额度福利", "回复退订", "免费领取"
+  ];
   fixedTerms.forEach(term => {
     if (text.includes(term.slice(0, 2)) || normalized.includes(term.slice(0, 2))) addCandidate(term, 0.16);
   });
 
   return [...candidates.values()]
     .sort((a, b) => b.trust - a.trust)
-    .slice(0, 8);
+    .slice(0, 20);
+}
+
+function isInExistingDictionary(word) {
+  return initialDictionaryWords.has(word);
 }
 
 function keywordAttention(word, label) {
@@ -288,7 +305,6 @@ function renderAll(result) {
   document.querySelector("#dictSize").textContent = Object.keys(dictionary).length;
   document.querySelector("#observeSize").textContent = Object.keys(observation).length;
   renderOverview(result);
-  renderPipeline(result);
   renderCandidates(result.candidates);
   renderDictionary(result.lifecycle);
   renderExplain(result);
@@ -337,32 +353,16 @@ function renderCategoryOverview() {
   }).join("");
 }
 
-function renderPipeline(result) {
-  const amountText = result.features.numeric.amounts.length ? result.features.numeric.amounts.join("、") : "无";
-  const linksText = result.features.link.links.length ? result.features.link.links.join("、") : "无";
-  const steps = [
-    ["文本获取", `原始短信完成输入；标准化后文本：${result.normalized}`, "S1"],
-    ["纠错与格式标准化", result.variants.length ? `变异还原：${result.variants.map(v => `${v.variant}->${v.standard}`).join("，")}` : "未发现形近字、同音字或拼音混写变异", "S1"],
-    ["多模态特征提取", `金额：${amountText}；链接：${linksText}；符号数：${result.features.symbol.symbolCount}；关键词：${result.features.text.keywordHits.join("、") || "无"}`, "S2"],
-    ["跨模态多头注意力融合", `文本、数值、符号、链接权重分别为 ${Object.values(result.modalWeights).map(v => `${Math.round(v * 100)}%`).join(" / ")}`, "S3"],
-    ["候选新词获取", `从高注意力词元扩展得到 ${result.candidates.length} 个候选词，超过可信阈值 ${result.candidates.filter(c => c.trusted).length} 个`, "S4-S5"],
-    ["词表注入与嵌入扩展", result.lifecycle.graduated.length ? `晋升并注入词表：${result.lifecycle.graduated.join("、")}` : "候选词进入观察区，待累计置信度达到阈值后注入", "S6"],
-    ["多任务联合训练输出", `分类=${result.classification.label}，新词检测=${result.candidates.some(c => c.trusted) ? "含新词" : "未确认"}，变异检测=${result.variants.length ? "含变异" : "无变异"}`, "S7-S8"]
-  ];
-  document.querySelector("#pipelineSteps").innerHTML = steps.map((step, index) => `
-    <article class="step">
-      <div class="step-index">${index + 1}</div>
-      <div>
-        <h3>${step[0]}</h3>
-        <p>${step[1]}</p>
-      </div>
-      <span class="tag">${step[2]}</span>
-    </article>
-  `).join("");
-}
-
 function renderCandidates(candidates) {
-  const rows = candidates.length ? candidates.map(item => `
+  const search = document.querySelector("#candidateSearch")?.value.trim() || "";
+  const hideKnown = document.querySelector("#hideKnownTerms")?.checked || false;
+  const filtered = candidates
+    .map(item => ({ ...item, inDictionary: isInExistingDictionary(item.word) }))
+    .filter(item => !search || item.word.includes(search))
+    .filter(item => !hideKnown || !item.inDictionary)
+    .sort((a, b) => b.trust - a.trust);
+
+  const rows = filtered.length ? filtered.map(item => `
     <tr>
       <td><strong>${item.word}</strong></td>
       <td>${percent(item.attention)}</td>
@@ -370,16 +370,23 @@ function renderCandidates(candidates) {
       <td>${percent(item.entropy)}</td>
       <td>${percent(item.labelGuidance)}</td>
       <td><span class="score-pill">${percent(item.trust)}</span></td>
-      <td>${item.trusted ? "<span class='highlight'>可信新词</span>" : "<span class='warn'>观察中</span>"}</td>
+      <td><span class="dict-pill ${item.inDictionary ? "exists" : ""}">${item.inDictionary ? "是" : "否"}</span></td>
+      <td>${item.inDictionary ? "<span class='highlight'>现有词</span>" : item.trusted ? "<span class='highlight'>可信新词</span>" : "<span class='warn'>观察中</span>"}</td>
     </tr>
-  `).join("") : `<tr><td colspan="7">暂无候选新词</td></tr>`;
+  `).join("") : `<tr><td colspan="8">暂无候选新词</td></tr>`;
   document.querySelector("#candidateRows").innerHTML = rows;
 }
 
 function renderDictionary(lifecycle = { graduated: [], observed: [] }) {
   const renderWord = entries => entries
     .sort((a, b) => b[1] - a[1])
-    .map(([word, score]) => `<span class="word-chip">${word}<small>${percent(score)}</small></span>`)
+    .map(([word, score]) => `
+      <div class="dict-bar-row">
+        <span class="dict-word" title="${word}">${word}</span>
+        <div class="dict-track"><span class="dict-fill" style="width:${Math.round(score * 100)}%"></span></div>
+        <strong class="dict-score">${percent(score)}</strong>
+      </div>
+    `)
     .join("");
 
   document.querySelector("#mainDict").innerHTML = renderWord(Object.entries(dictionary));
@@ -463,6 +470,16 @@ function initTabs() {
   });
 }
 
+function initCandidateFilters() {
+  const search = document.querySelector("#candidateSearch");
+  const hideKnown = document.querySelector("#hideKnownTerms");
+  const refresh = () => {
+    if (lastResult) renderCandidates(lastResult.candidates);
+  };
+  search.addEventListener("input", refresh);
+  hideKnown.addEventListener("change", refresh);
+}
+
 function roundRect(ctx, x, y, width, height, radius) {
   ctx.beginPath();
   ctx.moveTo(x + radius, y);
@@ -502,5 +519,6 @@ initSamples();
 renderCategoryOverview();
 initOverviewSamples();
 initTabs();
+initCandidateFilters();
 renderDictionary();
 analyze();

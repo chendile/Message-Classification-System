@@ -51,7 +51,6 @@
     <section class="main-panel">
       <nav class="tabs" aria-label="系统视图">
         <button class="tab active" data-tab="overview">分类总览</button>
-        <button class="tab" data-tab="pipeline">处理链路</button>
         <button class="tab" data-tab="newwords">新词发现</button>
         <button class="tab" data-tab="dictionary">动态词典</button>
         <button class="tab" data-tab="explain">决策解释</button>
@@ -127,14 +126,19 @@
         </div>
       </section>
 
-      <section id="pipeline" class="tab-view">
-        <div id="pipelineSteps" class="pipeline"></div>
-      </section>
-
       <section id="newwords" class="tab-view">
         <div class="section-head">
-          <h2>候选新词可信度分析</h2>
-          <p>综合模型注意力、PMI、边界熵、标签关联值计算可信关联值</p>
+          <div>
+            <h2>候选新词可信度分析</h2>
+            <p>综合模型注意力、PMI、边界熵、标签关联值计算可信关联值</p>
+          </div>
+          <div class="candidate-tools">
+            <input id="candidateSearch" type="search" placeholder="查询候选词">
+            <label class="filter-toggle">
+              <input id="hideKnownTerms" type="checkbox">
+              <span>批量过滤现有词表</span>
+            </label>
+          </div>
         </div>
         <div class="table-wrap">
           <table>
@@ -146,6 +150,7 @@
                 <th>边界熵</th>
                 <th>标签关联</th>
                 <th>可信关联值</th>
+                <th>现有词表</th>
                 <th>状态</th>
               </tr>
             </thead>
@@ -162,11 +167,11 @@
         <div class="dict-layout">
           <div>
             <h3>主词典</h3>
-            <div id="mainDict" class="word-cloud"></div>
+            <div id="mainDict" class="dict-bars"></div>
           </div>
           <div>
             <h3>观察区</h3>
-            <div id="observeDict" class="word-cloud observe"></div>
+            <div id="observeDict" class="dict-bars observe"></div>
           </div>
         </div>
         <div id="lifecycleLog" class="lifecycle"></div>
