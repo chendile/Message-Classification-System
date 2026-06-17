@@ -845,6 +845,8 @@ function applyDictionaryEdit() {
 }
 
 function renderIterationGraph(result) {
+  const graph = document.querySelector("#iterationGraph");
+  if (!graph) return;
   const candidates = [...result.candidates].sort((a, b) => b.trust - a.trust);
   const candidateWords = candidates.slice(0, 8).map(item => `${item.word} ${percent(item.trust)}`);
   const linkedEntries = getLinkedDictionaryEntries(result);
@@ -855,7 +857,7 @@ function renderIterationGraph(result) {
     .slice(0, 8)
     .map(([word, score]) => `${word} ${percent(score)}`);
 
-  document.querySelector("#iterationGraph").innerHTML = `
+  graph.innerHTML = `
     <div class="graph-canvas">
       <svg class="graph-lines" viewBox="0 0 1000 430" preserveAspectRatio="none" aria-hidden="true">
         <path d="M180 105 C300 105 300 105 420 105" />
