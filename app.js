@@ -483,6 +483,24 @@ function seedTaskLogs() {
       sampleId: "sample-7"
     },
     {
+      user: "zhouyan",
+      time: "2026/5/28 13:24:09",
+      type: "单条短信分类",
+      words: ["主词典：授信失败：91%", "观察区：很抱歉：72%", "观察区：综合评分：75%"],
+      model: defaultModelName,
+      params: "新词 2-8 字；门限 0.78",
+      sampleId: "sample-1"
+    },
+    {
+      user: "liujie",
+      time: "2026/6/2 18:06:44",
+      type: "批量短信分类",
+      words: ["主词典：放款失败：82%", "观察区：到账金额：63%", "主词典：支付宝：99%"],
+      model: defaultModelName,
+      params: "新词 2-8 字；门限 0.80",
+      sampleId: "sample-3"
+    },
+    {
       user: "wangyu",
       time: "2026/6/7 16:32:18",
       type: "短信分类",
@@ -492,6 +510,15 @@ function seedTaskLogs() {
       sampleId: "sample-5"
     },
     {
+      user: "sunhao",
+      time: "2026/6/11 08:52:31",
+      type: "单条短信分类",
+      words: ["主词典：已获批：88%", "主词典：最高额度：95%", "观察区：授信获批：67%"],
+      model: defaultModelName,
+      params: "新词 2-6 字；门限 0.82",
+      sampleId: "sample-0"
+    },
+    {
       user: "chenqi",
       time: "2026/6/15 11:08:03",
       type: "手动词典更新",
@@ -499,10 +526,39 @@ function seedTaskLogs() {
       model: defaultModelName,
       params: "新词 2-5 字；门限 0.80",
       sampleId: "sample-0"
+    },
+    {
+      user: "huangrui",
+      time: "2026/6/16 15:19:22",
+      type: "批量短信分类",
+      words: ["主词典：提额包：85%", "主词典：花呗：92%", "观察区：逾期金额：72%"],
+      model: defaultModelName,
+      params: "新词 3-8 字；门限 0.84",
+      sampleId: "sample-7"
+    },
+    {
+      user: "wuxin",
+      time: "2026/6/17 09:37:05",
+      type: "手动词典更新",
+      words: ["主词典：已逾期：87%", "观察区：扣款成功：74%", "观察区：本次授信失败：65%"],
+      model: defaultModelName,
+      params: "新词 2-8 字；门限 0.81",
+      sampleId: "sample-5"
+    },
+    {
+      user: "zhenghao",
+      time: "2026/6/17 14:26:48",
+      type: "手动词典更新",
+      words: ["主词典：支付宝：99%", "主词典：花呗：92%", "观察区：综合评分：75%"],
+      model: defaultModelName,
+      params: "新词 2-8 字；门限 0.83",
+      sampleId: "sample-1"
     }
   ];
 
-  taskLogs = baseTasks.map(task => ({ id: `task-${++taskSequence}`, ...task }));
+  taskLogs = baseTasks
+    .sort((a, b) => new Date(b.time.replace(/\//g, "-")).getTime() - new Date(a.time.replace(/\//g, "-")).getTime())
+    .map(task => ({ id: `task-${++taskSequence}`, ...task }));
 }
 
 function logDictionaryIteration(result) {
@@ -532,7 +588,9 @@ function renderTaskLogs() {
   const visibleLogs = selectedSample
     ? taskLogs.filter(log => log.sampleId === selectedSample.id)
     : taskLogs;
-  taskRows.innerHTML = visibleLogs.length ? visibleLogs.map(log => `
+  const sortedLogs = [...visibleLogs]
+    .sort((a, b) => new Date(b.time.replace(/\//g, "-")).getTime() - new Date(a.time.replace(/\//g, "-")).getTime());
+  taskRows.innerHTML = sortedLogs.length ? sortedLogs.map(log => `
     <tr>
       <td>${log.user}</td>
       <td>${log.time}</td>
